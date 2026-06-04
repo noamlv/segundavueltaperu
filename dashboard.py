@@ -17,6 +17,7 @@ from database import (
     get_onpe_candidate_history,
     get_onpe_candidate_history_by_run,
     get_onpe_latest,
+    get_onpe_run_summary_history,
     get_onpe_totals_history,
     get_run_timestamps,
 )
@@ -1194,82 +1195,82 @@ with tabs[1]:
 
     with onpe_tabs[1]:
         st.subheader("ONPE evolución")
-        totals_hist = get_onpe_totals_history()
-        if not totals_hist:
-            st.info("Todavía no hay capturas ONPE con totales guardados para construir evolución.")
-        elif len(totals_hist) < 2:
-            df = pd.DataFrame([dict(r) for r in totals_hist])
-            df["Fecha"] = pd.to_datetime(df["scraped_at"])
-            latest = df.sort_values("Fecha").iloc[-1]
-            st.info(
-                "Hay 1 captura ONPE con totales. Se necesita al menos una segunda captura "
-                "para mostrar variación temporal; mientras tanto se muestra la lectura inicial."
-            )
-
-            cols = st.columns(4)
-            for col, metric, label, pct_like in [
-                (cols[0], "contabilizadas", "Actas contabilizadas", False),
-                (cols[1], "actas_contabilizadas", "% actas", True),
-                (cols[2], "participacion", "Participación", True),
-                (cols[3], "votos_emitidos", "Votos emitidos", False),
-            ]:
-                with col:
-                    st.metric(label, fmt_pct(latest[metric]) if pct_like else fmt_num(latest[metric]))
-
-            st.dataframe(
-                df[
-                    [
-                        "Fecha",
-                        "contabilizadas",
-                        "total_actas",
-                        "actas_contabilizadas",
-                        "participacion",
-                        "votos_validos",
-                        "votos_emitidos",
-                    ]
-                ].rename(
-                    columns={
-                        "contabilizadas": "Actas contabilizadas",
-                        "total_actas": "Total de actas",
-                        "actas_contabilizadas": "% actas",
-                        "participacion": "% participación",
-                        "votos_validos": "Votos válidos",
-                        "votos_emitidos": "Votos emitidos",
-                    }
-                ),
-                hide_index=True,
-                width="stretch",
-            )
+        summary_hist = get_onpe_run_summary_history()
+        if not summary_hist:
+            st.info("Todavía no hay capturas ONPE guardadas para construir evolución.")
         else:
-            df = pd.DataFrame([dict(r) for r in totals_hist])
+            df = pd.DataFrame([dict(r) for r in summary_hist])
             df["Fecha"] = pd.to_datetime(df["scraped_at"])
             df = df.sort_values("Fecha")
+            df["Votos válidos"] = df["votos_validos"].fillna(df["votos_validos_fallback"])
+            df["Votos emitidos"] = df["votos_emitidos"].fillna(
+                df["Votos válidos"].fillna(0) + df["votos_blancos"].fillna(0) + df["votos_nulos"].fillna(0)
+            )
+            df["Tiene totales"] = df["actas_contabilizadas"].notna()
+
+            latest = df.iloc[-1]
+            previous = df.iloc[-2] if len(df) > 1 else None
 
             cols = st.columns(4)
             for col, metric, label, pct_like in [
                 (cols[0], "contabilizadas", "Actas contabilizadas", False),
                 (cols[1], "actas_contabilizadas", "% actas", True),
                 (cols[2], "participacion", "Participación", True),
-                (cols[3], "votos_emitidos", "Votos emitidos", False),
+                (cols[3], "Votos emitidos", "Votos emitidos", False),
             ]:
-                latest = df[metric].iloc[-1]
-                delta = df[metric].iloc[-1] - df[metric].iloc[-2]
+                value = latest.get(metric)
+                delta = safe_float(latest.get(metric), 0) - safe_float(previous.get(metric), 0) if previous is not None else None
                 with col:
-                    st.metric(label, fmt_pct(latest) if pct_like else fmt_num(latest), fmt_delta(delta, pct_like))
+                    st.metric(label, fmt_pct(value) if pct_like else fmt_num(value), fmt_delta(delta, pct_like) if delta is not None else "-")
 
-            cols = st.columns(2)
-            with cols[0]:
-                fig = go.Figure()
-                add_line_trace(fig, df, "Fecha", "actas_contabilizadas", "Actas contabilizadas", ONPE_BLUE)
-                fig.update_yaxes(range=[0, 100])
-                fig.update_layout(title="Avance de contabilización ONPE", yaxis_title="% de actas")
-                st.plotly_chart(apply_fig_style(fig, height=360, legend=False), width="stretch")
-            with cols[1]:
-                fig = go.Figure()
-                add_line_trace(fig, df, "Fecha", "votos_validos", "Votos válidos", ONPE_BLUE)
-                add_line_trace(fig, df, "Fecha", "votos_emitidos", "Votos emitidos", GREEN)
-                fig.update_layout(title="Volumen de votos acumulados", yaxis_title="Votos")
-                st.plotly_chart(apply_fig_style(fig, height=360), width="stretch")
+            if len(df) > 1:
+                tracked = ["contabilizadas", "actas_contabilizadas", "participacion", "Votos emitidos"]
+                changed = any(
+                    abs(safe_float(latest.get(metric), 0) - safe_float(previous.get(metric), 0)) > 0.0001
+                    for metric in tracked
+                )
+                if changed:
+                    st.success("La última captura ONPE muestra variación respecto de la captura anterior.")
+                else:
+                    st.info(
+                        "Las capturas ONPE están entrando, pero la fuente no muestra variación visible. "
+                        "Esto es esperable si el conteo oficial ya está estabilizado."
+                    )
+
+                cols = st.columns(2)
+                with cols[0]:
+                    fig = go.Figure()
+                    if df["actas_contabilizadas"].notna().any():
+                        add_line_trace(fig, df, "Fecha", "actas_contabilizadas", "Actas contabilizadas", ONPE_BLUE)
+                        fig.update_yaxes(range=[0, 100])
+                    else:
+                        add_line_trace(fig, df, "Fecha", "filas_candidaturas", "Filas capturadas", ONPE_BLUE)
+                    fig.update_layout(title="Avance de contabilización ONPE", yaxis_title="% de actas")
+                    st.plotly_chart(apply_fig_style(fig, height=330, legend=False), width="stretch")
+                with cols[1]:
+                    fig = go.Figure()
+                    add_line_trace(fig, df, "Fecha", "Votos válidos", "Votos válidos", ONPE_BLUE)
+                    add_line_trace(fig, df, "Fecha", "Votos emitidos", "Votos emitidos", GREEN)
+                    fig.update_layout(title="Volumen de votos acumulados", yaxis_title="Votos")
+                    st.plotly_chart(apply_fig_style(fig, height=330), width="stretch")
+
+                cols = st.columns(2)
+                with cols[0]:
+                    fig = go.Figure()
+                    add_line_trace(fig, df, "Fecha", "votos_blancos", "Votos en blanco", "#9CA3AF")
+                    add_line_trace(fig, df, "Fecha", "votos_nulos", "Votos nulos", "#4B5563")
+                    fig.update_layout(title="Votos blancos y nulos", yaxis_title="Votos")
+                    st.plotly_chart(apply_fig_style(fig, height=310), width="stretch")
+                with cols[1]:
+                    capture_df = df.copy()
+                    capture_df["Captura registrada"] = 1
+                    fig = go.Figure()
+                    add_line_trace(fig, capture_df, "Fecha", "Captura registrada", "Capturas ONPE", ONPE_LIGHT)
+                    fig.update_yaxes(range=[0, 1.2], tickvals=[0, 1], title="Captura registrada")
+                    fig.update_layout(title="Cadencia de capturas ONPE")
+                    st.plotly_chart(apply_fig_style(fig, height=310, legend=False), width="stretch")
+            else:
+                st.info("Hay 1 captura ONPE guardada. La siguiente captura permitirá dibujar variación temporal.")
 
             all_hist = get_onpe_candidate_history_by_run()
             if all_hist:
@@ -1284,21 +1285,24 @@ with tabs[1]:
                 top_labels = candidate_labels + vote_type_labels
                 cand_hist = cand_hist[cand_hist["Etiqueta"].isin(top_labels)].sort_values(["Etiqueta", "Fecha"])
                 color_map = latest_candidates.set_index("Etiqueta")["Color"].to_dict()
-                fig = px.line(
-                    cand_hist,
-                    x="Fecha",
-                    y="votos_validos",
-                    color="Etiqueta",
-                    markers=True,
-                    title="Evolución de votos por candidatura y tipo de voto",
-                    color_discrete_map=color_map,
-                )
-                fig.update_traces(line=dict(width=3), marker=dict(size=7))
-                fig.update_yaxes(tickformat=".2s", title="Votos")
-                st.plotly_chart(apply_fig_style(fig, height=520), width="stretch")
+                if len(cand_hist["Fecha"].drop_duplicates()) > 1:
+                    fig = px.line(
+                        cand_hist,
+                        x="Fecha",
+                        y="votos_validos",
+                        color="Etiqueta",
+                        markers=True,
+                        title="Evolución de votos por candidatura y tipo de voto",
+                        color_discrete_map=color_map,
+                    )
+                    fig.update_traces(line=dict(width=3), marker=dict(size=7))
+                    fig.update_yaxes(tickformat=".2s", title="Votos")
+                    st.plotly_chart(apply_fig_style(fig, height=520), width="stretch")
+                else:
+                    st.caption("Hay resultados ONPE por candidatura, pero todavía no hay dos capturas para trazar líneas por candidatura.")
 
                 pct_hist = cand_hist[cand_hist["pct_validos"].notna()]
-                if not pct_hist.empty:
+                if not pct_hist.empty and len(pct_hist["Fecha"].drop_duplicates()) > 1:
                     fig = px.line(
                         pct_hist,
                         x="Fecha",
@@ -1328,21 +1332,20 @@ with tabs[1]:
                     st.subheader("Última variación detectada")
                     st.dataframe(pd.DataFrame(last_changes), hide_index=True, width="stretch")
                     if all(row["Variación anterior"] in ["+0", "-0"] for row in last_changes):
-                        st.caption("Las capturas actuales no muestran variación porque estamos trabajando con datos estables de prueba.")
+                        st.caption("Las capturas actuales no muestran variación visible porque la fuente está estable.")
 
             st.dataframe(
-                df[["Fecha", "contabilizadas", "actas_contabilizadas", "participacion", "votos_validos", "votos_emitidos"]].rename(
+                df[["Fecha", "contabilizadas", "actas_contabilizadas", "participacion", "Votos válidos", "Votos emitidos", "Tiene totales"]].rename(
                     columns={
                         "contabilizadas": "Actas contabilizadas",
                         "actas_contabilizadas": "% actas",
                         "participacion": "% participación",
-                        "votos_validos": "Votos válidos",
-                        "votos_emitidos": "Votos emitidos",
                     }
                 ),
                 hide_index=True,
                 width="stretch",
             )
+            st.caption(f"Corridas ONPE almacenadas: {source_counts.get('onpe', 0)}. Capturas con totales ONPE: {int(df['Tiene totales'].sum())}.")
 
 
 with tabs[2]:

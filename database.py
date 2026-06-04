@@ -644,6 +644,57 @@ def get_onpe_totals_history(limit: int = 500) -> list[sqlite3.Row]:
     return rows
 
 
+def get_onpe_run_summary_history(limit: int = 500) -> list[sqlite3.Row]:
+    """One ONPE summary row per run, using totals when present and candidates as fallback."""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT
+              r.id AS run_id,
+              r.scraped_at,
+              t.actas_contabilizadas,
+              t.contabilizadas,
+              t.total_actas,
+              t.participacion,
+              t.votos_emitidos,
+              t.votos_validos,
+              COALESCE(t.votos_validos, c.votos_validos_fallback) AS votos_validos_fallback,
+              c.votos_blancos,
+              c.votos_nulos,
+              c.filas_candidaturas
+           FROM scrape_runs r
+           LEFT JOIN onpe_totals t ON t.run_id = r.id
+           LEFT JOIN (
+               SELECT
+                   run_id,
+                   SUM(CASE
+                       WHEN UPPER(COALESCE(nombre_partido, '')) NOT LIKE '%BLANCO%'
+                        AND UPPER(COALESCE(nombre_partido, '')) NOT LIKE '%NULO%'
+                       THEN COALESCE(votos_validos, 0)
+                       ELSE 0
+                   END) AS votos_validos_fallback,
+                   SUM(CASE
+                       WHEN UPPER(COALESCE(nombre_partido, '')) LIKE '%BLANCO%'
+                       THEN COALESCE(votos_validos, 0)
+                       ELSE 0
+                   END) AS votos_blancos,
+                   SUM(CASE
+                       WHEN UPPER(COALESCE(nombre_partido, '')) LIKE '%NULO%'
+                       THEN COALESCE(votos_validos, 0)
+                       ELSE 0
+                   END) AS votos_nulos,
+                   COUNT(id) AS filas_candidaturas
+               FROM onpe_candidates
+               GROUP BY run_id
+           ) c ON c.run_id = r.id
+           WHERE r.source = 'onpe'
+           ORDER BY r.id
+           LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+
 def get_onpe_candidate_history(candidate_name: str, limit: int = 500) -> list[sqlite3.Row]:
     """Vote history for a specific candidate across runs."""
     conn = get_conn()
