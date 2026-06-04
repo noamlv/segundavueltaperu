@@ -10,14 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       JNE_POWERBI_URL: ${{ vars.JNE_POWERBI_URL || 'https://web.jne.gob.pe/reporteactasobservadas/' }}
       JNE_WAIT_SECONDS: ${{ vars.JNE_WAIT_SECONDS || '25' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
