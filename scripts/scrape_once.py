@@ -47,6 +47,15 @@ async def main() -> None:
     print("Running ONPE scraper...")
     onpe_raw = await scrape_onpe()
     onpe_payload = {"_meta": {"timestamp": datetime.now().isoformat()}, **serialize(onpe_raw)}
+    onpe_totals = onpe_payload.get("totals") or {}
+    onpe_candidates = onpe_payload.get("candidates") or []
+    print(
+        "ONPE payload: "
+        f"totales={'si' if onpe_totals else 'no'}, "
+        f"candidaturas={len(onpe_candidates) if isinstance(onpe_candidates, list) else 0}"
+    )
+    if not onpe_totals and not onpe_candidates:
+        print("WARNING: ONPE returned no totals or candidates; dashboard will keep latest valid ONPE snapshot.")
     onpe_run_id = save_run_onpe(onpe_payload)
     print(f"ONPE saved as run_id={onpe_run_id}")
 
@@ -55,6 +64,11 @@ async def main() -> None:
     wait_seconds = int(os.getenv("JNE_WAIT_SECONDS", "25"))
     scraper = PowerBIScraper(headless=True)
     jne_results = await scraper.scrape(url, wait_after_load=wait_seconds)
+    print(
+        "JNE payload: "
+        f"tablas={len(jne_results.get('tables', []))}, "
+        f"medidas={len(jne_results.get('measures', []))}"
+    )
     jne_payload = _pbi_raw_payload(jne_results)
     jne_run_id = save_run(jne_payload, source="jne")
     print(f"JNE saved as run_id={jne_run_id}")

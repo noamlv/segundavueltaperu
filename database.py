@@ -608,7 +608,13 @@ def get_onpe_latest() -> dict:
     """Get latest ONPE totals and candidates."""
     conn = get_conn()
     row = conn.execute(
-        "SELECT MAX(id) AS id FROM scrape_runs WHERE source = 'onpe'"
+        """SELECT MAX(r.id) AS id
+           FROM scrape_runs r
+           WHERE r.source = 'onpe'
+             AND (
+                 EXISTS (SELECT 1 FROM onpe_totals t WHERE t.run_id = r.id)
+                 OR EXISTS (SELECT 1 FROM onpe_candidates c WHERE c.run_id = r.id)
+             )"""
     ).fetchone()
     run_id = row["id"] if row and row["id"] else None
     if not run_id:
@@ -626,6 +632,7 @@ def get_onpe_latest() -> dict:
     ).fetchall()
     conn.close()
     return {
+        "run_id": run_id,
         "totals": dict(totals) if totals else {},
         "mesas": dict(mesas) if mesas else {},
         "candidates": [dict(r) for r in candidates],
