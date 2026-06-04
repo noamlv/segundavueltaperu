@@ -897,12 +897,12 @@ with tabs[0]:
             "ONPE actas contabilizadas",
             fmt_pct(totals.get("actas_contabilizadas")),
             f"{fmt_num(totals.get('contabilizadas'))} de {fmt_num(totals.get('total_actas'))} actas",
-            pill=f"{source_counts.get('onpe', 0)} corridas",
+            pill=f"{source_counts.get('onpe', 0)} consultas",
             pill_kind="info",
         )
     with cols[1]:
         metric_card(
-            "ONPE liderazgo",
+            "ONPE diferencia de votos",
             fmt_num(lead_votes),
             f"{leader.get('nombre_partido', '-').title()} sobre {second.get('nombre_partido', '-').title()}",
             pill=fmt_pct(leader.get("pct_validos"), 2),
@@ -912,15 +912,15 @@ with tabs[0]:
         metric_card(
             "JNE avance",
             fmt_pct(kpi_value(jne_kpis, "ActasObservadas.PorcentajeAvance"), 2),
-            f"{fmt_num(kpi_value(jne_kpis, 'ActasObservadas.ActasProcesadas'))} actas procesadas",
-            pill=f"{source_counts.get('jne', 0)} corridas",
+            f"{fmt_num(kpi_value(jne_kpis, 'ActasObservadas.ActasProcesadas'))} actas observadas con expedientes creados",
+            pill=f"{source_counts.get('jne', 0)} consultas",
             pill_kind="info",
         )
     with cols[3]:
         metric_card(
-            "JNE pendientes críticos",
-            fmt_num(kpi_value(jne_kpis, "ActasObservadas.ExpedientesFaltantes")),
-            f"{fmt_num(kpi_value(jne_kpis, 'ActasObservadas.ActasEnTramite'))} expedientes en trámite",
+            "JNE expedientes en trámite",
+            fmt_num(kpi_value(jne_kpis, "ActasObservadas.ActasEnTramite")),
+            "Expedientes de actas observadas en trámite",
             pill="seguimiento",
             pill_kind="warn",
         )
@@ -1005,13 +1005,13 @@ with tabs[0]:
             st.plotly_chart(style_donut(fig, height=455), width="stretch")
     with cols[2]:
         if not runs_df.empty:
-            runs_count = runs_df.groupby("source", as_index=False).size().rename(columns={"size": "corridas"})
+            runs_count = runs_df.groupby("source", as_index=False).size().rename(columns={"size": "consultas"})
             fig = px.bar(
                 runs_count,
                 x="source",
-                y="corridas",
+                y="consultas",
                 color="source",
-                text="corridas",
+                text="consultas",
                 title="Capturas almacenadas",
                 color_discrete_map={"onpe": ONPE_BLUE, "jne": JNE_RED},
             )
@@ -1345,7 +1345,7 @@ with tabs[1]:
                 hide_index=True,
                 width="stretch",
             )
-            st.caption(f"Corridas ONPE almacenadas: {source_counts.get('onpe', 0)}. Capturas con totales ONPE: {int(df['Tiene totales'].sum())}.")
+            st.caption(f"Consultas ONPE almacenadas: {source_counts.get('onpe', 0)}. Capturas con totales ONPE: {int(df['Tiene totales'].sum())}.")
 
 
 with tabs[2]:
@@ -1511,7 +1511,7 @@ with tabs[2]:
                         fig.update_layout(title=label, yaxis_title="Cantidad")
                         st.plotly_chart(apply_fig_style(fig, height=310, legend=False), width="stretch")
                     else:
-                        st.info(f"Se necesitan al menos 2 corridas para {label.lower()}.")
+                        st.info(f"Se necesitan al menos 2 consultas para {label.lower()}.")
 
             totals_history = get_jee_totals_history()
             if totals_history and len(totals_history) > 1:
@@ -1529,7 +1529,7 @@ with tabs[2]:
                 if all(df_total[col].iloc[-1] == df_total[col].iloc[-2] for col in ["total_expedientes", "total_ajustado", "total_atendidas"]):
                     st.caption("Las últimas capturas del JNE no muestran variación; esto es esperable con datos de ensayo ya estabilizados.")
             else:
-                st.info("Se necesitan al menos 2 corridas JNE para totales.")
+                st.info("Se necesitan al menos 2 consultas JNE para totales.")
 
             jee_detail = get_jje_detail(latest_jne)
             if jee_detail:
@@ -1574,9 +1574,9 @@ with tabs[2]:
                         fig.update_layout(title=f"{jee_sel}: evolución", yaxis_title="Cantidad")
                         st.plotly_chart(apply_fig_style(fig, height=420), width="stretch")
                     else:
-                        st.info("Se necesitan al menos 2 corridas para ese JEE.")
+                        st.info("Se necesitan al menos 2 consultas para ese JEE.")
 
-            st.caption(f"Corridas JNE almacenadas: {source_counts.get('jne', 0)}")
+            st.caption(f"Consultas JNE almacenadas: {source_counts.get('jne', 0)}")
 
 
 with tabs[3]:
