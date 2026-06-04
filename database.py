@@ -36,15 +36,24 @@ def _safe_dsn_summary(url: str) -> str:
     parsed = urlparse(url)
     return (
         "No se pudo abrir conexión Postgres. "
+        f"{_dsn_target_summary(url)} "
+        "Verifica que Streamlit Secrets tenga exactamente el mismo DATABASE_URL "
+        "que GitHub Actions y que la contraseña esté codificada si contiene "
+        "caracteres como @, #, / o :."
+    )
+
+
+def _dsn_target_summary(url: str) -> str:
+    if not url:
+        return "DATABASE_URL no está configurado."
+    parsed = urlparse(url)
+    return (
         f"scheme={parsed.scheme or 'vacío'}, "
         f"user={parsed.username or 'vacío'}, "
         f"host={parsed.hostname or 'vacío'}, "
         f"port={parsed.port or 'vacío'}, "
         f"database={parsed.path.lstrip('/') or 'vacío'}, "
-        f"sslmode={parse_qs(parsed.query).get('sslmode', ['vacío'])[0]}. "
-        "Verifica que Streamlit Secrets tenga exactamente el mismo DATABASE_URL "
-        "que GitHub Actions y que la contraseña esté codificada si contiene "
-        "caracteres como @, #, / o :."
+        f"sslmode={parse_qs(parsed.query).get('sslmode', ['vacío'])[0]}."
     )
 
 
