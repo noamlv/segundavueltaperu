@@ -75,24 +75,6 @@ def insert_scrape_run(conn: DbConnection, source: str, scraped_at: str) -> int:
 
 def init_db():
     conn = get_conn()
-    # Migrate: add source column if missing
-    try:
-        conn.execute("ALTER TABLE scrape_runs ADD COLUMN source TEXT NOT NULL DEFAULT 'jne'")
-    except Exception:
-        pass
-    # Migrate: add ONPE detail columns
-    for col in [
-        "enviadas_jee INTEGER",
-        "actas_enviadas_jee REAL",
-        "pendientes_jee INTEGER",
-        "actas_pendientes_jee REAL",
-        "porcentaje_votos_validos REAL",
-        "porcentaje_votos_emitidos REAL",
-    ]:
-        try:
-            conn.execute(f"ALTER TABLE onpe_totals ADD COLUMN {col}")
-        except Exception:
-            pass
     sqlite_schema = """
         CREATE TABLE IF NOT EXISTS scrape_runs (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,6 +250,41 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_onpe_candidates_run ON onpe_candidates(run_id);
     """
     conn.executescript(postgres_schema if conn.is_postgres else sqlite_schema)
+    conn.commit()
+
+    # Migrate existing databases after the base schema exists. PostgreSQL keeps
+    # a transaction aborted after a failed DDL statement, so use IF NOT EXISTS
+    # there and keep SQLite on the older try/ignore path.
+    if conn.is_postgres:
+        migrations = [
+            "ALTER TABLE scrape_runs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'jne'",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS enviadas_jee INTEGER",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS actas_enviadas_jee REAL",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS pendientes_jee INTEGER",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS actas_pendientes_jee REAL",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS porcentaje_votos_validos REAL",
+            "ALTER TABLE onpe_totals ADD COLUMN IF NOT EXISTS porcentaje_votos_emitidos REAL",
+        ]
+        for migration in migrations:
+            conn.execute(migration)
+    else:
+        try:
+            conn.execute("ALTER TABLE scrape_runs ADD COLUMN source TEXT NOT NULL DEFAULT 'jne'")
+        except Exception:
+            pass
+        for col in [
+            "enviadas_jee INTEGER",
+            "actas_enviadas_jee REAL",
+            "pendientes_jee INTEGER",
+            "actas_pendientes_jee REAL",
+            "porcentaje_votos_validos REAL",
+            "porcentaje_votos_emitidos REAL",
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE onpe_totals ADD COLUMN {col}")
+            except Exception:
+                pass
+
     conn.commit()
     conn.close()
 
