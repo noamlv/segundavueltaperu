@@ -808,7 +808,11 @@ global_events_df = build_event_log()
 
 
 st.title("Segunda vuelta de la Elección Presidencial Perú 2026")
-st.caption("ONPE y JNE integrados con capturas históricas para leer avance, resultados y variación temporal.")
+st.caption(
+    "Seguimiento de la contabilidad de actas electorales de los sitios web de la "
+    "ONPE y el JNE con capturas históricas para leer avance, resultados y "
+    "variación temporal del resultado electoral."
+)
 
 tabs = st.tabs(
     [
