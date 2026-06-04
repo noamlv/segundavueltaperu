@@ -93,8 +93,9 @@ def get_conn() -> DbConnection:
 
         try:
             conn = psycopg2.connect(database_url, connect_timeout=10)
-        except psycopg2.OperationalError:
-            raise RuntimeError(_safe_dsn_summary(database_url)) from None
+        except psycopg2.OperationalError as exc:
+            detail = str(exc).replace(database_url, "[DATABASE_URL]")
+            raise RuntimeError(f"{_safe_dsn_summary(database_url)} Detalle técnico: {detail}") from None
         return DbConnection(conn, is_postgres=True)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
