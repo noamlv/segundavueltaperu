@@ -1195,8 +1195,51 @@ with tabs[1]:
     with onpe_tabs[1]:
         st.subheader("ONPE evolución")
         totals_hist = get_onpe_totals_history()
-        if not totals_hist or len(totals_hist) < 2:
-            st.info("Se necesitan al menos 2 corridas ONPE para mostrar evolución.")
+        if not totals_hist:
+            st.info("Todavía no hay capturas ONPE con totales guardados para construir evolución.")
+        elif len(totals_hist) < 2:
+            df = pd.DataFrame([dict(r) for r in totals_hist])
+            df["Fecha"] = pd.to_datetime(df["scraped_at"])
+            latest = df.sort_values("Fecha").iloc[-1]
+            st.info(
+                "Hay 1 captura ONPE con totales. Se necesita al menos una segunda captura "
+                "para mostrar variación temporal; mientras tanto se muestra la lectura inicial."
+            )
+
+            cols = st.columns(4)
+            for col, metric, label, pct_like in [
+                (cols[0], "contabilizadas", "Actas contabilizadas", False),
+                (cols[1], "actas_contabilizadas", "% actas", True),
+                (cols[2], "participacion", "Participación", True),
+                (cols[3], "votos_emitidos", "Votos emitidos", False),
+            ]:
+                with col:
+                    st.metric(label, fmt_pct(latest[metric]) if pct_like else fmt_num(latest[metric]))
+
+            st.dataframe(
+                df[
+                    [
+                        "Fecha",
+                        "contabilizadas",
+                        "total_actas",
+                        "actas_contabilizadas",
+                        "participacion",
+                        "votos_validos",
+                        "votos_emitidos",
+                    ]
+                ].rename(
+                    columns={
+                        "contabilizadas": "Actas contabilizadas",
+                        "total_actas": "Total de actas",
+                        "actas_contabilizadas": "% actas",
+                        "participacion": "% participación",
+                        "votos_validos": "Votos válidos",
+                        "votos_emitidos": "Votos emitidos",
+                    }
+                ),
+                hide_index=True,
+                width="stretch",
+            )
         else:
             df = pd.DataFrame([dict(r) for r in totals_hist])
             df["Fecha"] = pd.to_datetime(df["scraped_at"])
