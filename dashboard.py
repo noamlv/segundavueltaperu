@@ -168,6 +168,23 @@ def fmt_time(value):
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
+def short_election_type(value):
+    text = str(value or "").strip().upper()
+    mapping = {
+        "PRESIDENCIAL": "Presidencial",
+        "PRESIDENCIA": "Presidencial",
+        "DIPUTADOS": "Diputados",
+        "PARLAMENTO ANDINO": "Parlamento Andino",
+        "SENADORES DISTRITO ÚNICO": "Senadores distrito único",
+        "SENADORES DISTRITO UNICO": "Senadores distrito único",
+        "SENADORES DISTRITO MÚLTIPLE": "Senadores distrito múltiple",
+        "SENADORES DISTRITO MULTIPLE": "Senadores distrito múltiple",
+        "MAS DE UN TIPO DE ELECCIÓN": "Más de una elección",
+        "MÁS DE UN TIPO DE ELECCIÓN": "Más de una elección",
+    }
+    return mapping.get(text, str(value or "").strip().title())
+
+
 def apply_fig_style(fig, height=360, legend=True):
     fig.update_layout(
         height=height,
@@ -179,6 +196,36 @@ def apply_fig_style(fig, height=360, legend=True):
     )
     fig.update_xaxes(gridcolor=GRID, zerolinecolor=GRID)
     fig.update_yaxes(gridcolor=GRID, zerolinecolor=GRID)
+    return fig
+
+
+def style_donut(fig, height=440):
+    fig.update_traces(
+        hole=0.55,
+        textinfo="percent",
+        textposition="inside",
+        insidetextfont=dict(size=12, color="white"),
+        marker=dict(line=dict(color="white", width=2)),
+        sort=False,
+    )
+    fig.update_layout(
+        height=height,
+        margin=dict(t=46, l=8, r=8, b=92),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(color=INK),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.06,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=9),
+        ),
+        uniformtext_minsize=10,
+        uniformtext_mode="hide",
+    )
     return fig
 
 
@@ -204,9 +251,10 @@ def gauge(title, value, color, subtitle=None):
     fig = go.Figure(
         go.Indicator(
             mode="gauge+number",
+            domain={"x": [0, 1], "y": [0.24, 1]},
             value=pct,
-            number={"suffix": "%", "font": {"size": 34}},
-            title={"text": title, "font": {"size": 16}},
+            number={"suffix": "%", "font": {"size": 30}},
+            title={"text": title, "font": {"size": 15}},
             gauge={
                 "axis": {
                     "range": [0, 100],
@@ -229,11 +277,15 @@ def gauge(title, value, color, subtitle=None):
         fig.add_annotation(
             text=subtitle,
             x=0.5,
-            y=0,
+            y=0.02,
             showarrow=False,
             font=dict(size=12, color="#4b5563"),
+            xanchor="center",
+            yanchor="bottom",
         )
-    return apply_fig_style(fig, height=245, legend=False)
+    fig = apply_fig_style(fig, height=270, legend=False)
+    fig.update_layout(margin=dict(t=42, l=8, r=8, b=42))
+    return fig
 
 
 def is_blank_or_null(row):
@@ -915,7 +967,7 @@ with tabs[0]:
         )
 
     st.divider()
-    cols = st.columns([1.25, 1, 1])
+    cols = st.columns([1.15, 1.2, 1])
     with cols[0]:
         if top_candidates:
             df_top = pd.DataFrame(top_candidates[:8])
@@ -940,15 +992,16 @@ with tabs[0]:
         actas = get_actas_by_type(latest_jne) if latest_jne else []
         if actas:
             df_actas = pd.DataFrame([dict(r) for r in actas])
+            df_actas["Tipo"] = df_actas["tipo_eleccion"].map(short_election_type)
             fig = px.pie(
                 df_actas,
                 values="actas_completas",
-                names="tipo_eleccion",
+                names="Tipo",
                 hole=0.55,
                 title="JNE: distribución por tipo",
                 color_discrete_sequence=[JNE_RED, "#6B7280", "#A3A3A3", "#404040", "#D1D5DB", "#991B1B"],
             )
-            st.plotly_chart(apply_fig_style(fig, height=420), width="stretch")
+            st.plotly_chart(style_donut(fig, height=455), width="stretch")
     with cols[2]:
         if not runs_df.empty:
             runs_count = runs_df.groupby("source", as_index=False).size().rename(columns={"size": "corridas"})
@@ -1091,7 +1144,7 @@ with tabs[1]:
                 color="Tipo",
                 color_discrete_map={"Válidos por candidaturas": ONPE_BLUE, "Blanco": "#9CA3AF", "Nulo": "#4B5563"},
             )
-            st.plotly_chart(apply_fig_style(fig, height=380), width="stretch")
+            st.plotly_chart(style_donut(fig, height=430), width="stretch")
 
             st.subheader("Composición y relaciones ONPE")
             rel_cols = st.columns([1, 1])
@@ -1296,15 +1349,16 @@ with tabs[2]:
                 actas = get_actas_by_type(latest_jne)
                 if actas:
                     df_actas = pd.DataFrame([dict(r) for r in actas])
+                    df_actas["Tipo"] = df_actas["tipo_eleccion"].map(short_election_type)
                     fig = px.pie(
                         df_actas,
                         values="actas_completas",
-                        names="tipo_eleccion",
+                        names="Tipo",
                         hole=0.55,
                         title="Por tipo de elección",
                         color_discrete_sequence=[JNE_RED, "#6B7280", "#A3A3A3", "#404040", "#D1D5DB", "#991B1B"],
                     )
-                    st.plotly_chart(apply_fig_style(fig, height=500), width="stretch")
+                    st.plotly_chart(style_donut(fig, height=500), width="stretch")
                     df_actas["Actas"] = df_actas["actas_completas"].map(fmt_num)
                     st.dataframe(
                         df_actas[["tipo_eleccion", "Actas"]].rename(columns={"tipo_eleccion": "Tipo de elección"}),
