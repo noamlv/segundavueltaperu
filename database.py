@@ -77,7 +77,10 @@ class DbConnection:
             import psycopg2.extras
 
             cur = self.raw.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute(sql, params)
+            if params:
+                cur.execute(sql, params)
+            else:
+                cur.execute(sql)
             return cur
         return self.raw.execute(sql, params)
 
@@ -647,8 +650,9 @@ def get_onpe_totals_history(limit: int = 500) -> list[sqlite3.Row]:
 def get_onpe_run_summary_history(limit: int = 500) -> list[sqlite3.Row]:
     """One ONPE summary row per run, using totals when present and candidates as fallback."""
     conn = get_conn()
+    safe_limit = max(1, int(limit))
     rows = conn.execute(
-        """SELECT
+        f"""SELECT
               r.id AS run_id,
               r.scraped_at,
               t.actas_contabilizadas,
@@ -688,8 +692,7 @@ def get_onpe_run_summary_history(limit: int = 500) -> list[sqlite3.Row]:
            ) c ON c.run_id = r.id
            WHERE r.source = 'onpe'
            ORDER BY r.id
-           LIMIT ?""",
-        (limit,),
+           LIMIT {safe_limit}""",
     ).fetchall()
     conn.close()
     return rows
