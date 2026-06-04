@@ -3,10 +3,49 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 DB_PATH = Path(__file__).parent / "data" / "electoral.db"
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-USE_POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+
+def _load_database_url() -> str:
+    url = os.getenv("DATABASE_URL", "").strip()
+    if url:
+        return url
+    try:
+        import streamlit as st
+
+        return str(st.secrets.get("DATABASE_URL", "")).strip()
+    except Exception:
+        return ""
+
+
+def _with_required_ssl(url: str) -> str:
+    if not url.startswith(("postgres://", "postgresql://")):
+        return url
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if "sslmode" not in query:
+        query["sslmode"] = ["require"]
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
+def _safe_dsn_summary(url: str) -> str:
+    if not url:
+        return "DATABASE_URL no está configurado."
+    parsed = urlparse(url)
+    return (
+        "No se pudo abrir conexión Postgres. "
+        f"scheme={parsed.scheme or 'vacío'}, "
+        f"user={parsed.username or 'vacío'}, "
+        f"host={parsed.hostname or 'vacío'}, "
+        f"port={parsed.port or 'vacío'}, "
+        f"database={parsed.path.lstrip('/') or 'vacío'}, "
+        f"sslmode={parse_qs(parsed.query).get('sslmode', ['vacío'])[0]}. "
+        "Verifica que Streamlit Secrets tenga exactamente el mismo DATABASE_URL "
+        "que GitHub Actions y que la contraseña esté codificada si contiene "
+        "caracteres como @, #, / o :."
+    )
 
 
 class DbConnection:
@@ -48,10 +87,14 @@ class DbConnection:
 
 
 def get_conn() -> DbConnection:
-    if USE_POSTGRES:
+    database_url = _with_required_ssl(_load_database_url())
+    if database_url.startswith(("postgres://", "postgresql://")):
         import psycopg2
 
-        conn = psycopg2.connect(DATABASE_URL)
+        try:
+            conn = psycopg2.connect(database_url, connect_timeout=10)
+        except psycopg2.OperationalError:
+            raise RuntimeError(_safe_dsn_summary(database_url)) from None
         return DbConnection(conn, is_postgres=True)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
