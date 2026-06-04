@@ -651,6 +651,12 @@ def get_onpe_run_summary_history(limit: int = 500) -> list[sqlite3.Row]:
     """One ONPE summary row per run, using totals when present and candidates as fallback."""
     conn = get_conn()
     safe_limit = max(1, int(limit))
+    if conn.is_postgres:
+        blanco_match = "STRPOS(UPPER(COALESCE(nombre_partido, '')), 'BLANCO') > 0"
+        nulo_match = "STRPOS(UPPER(COALESCE(nombre_partido, '')), 'NULO') > 0"
+    else:
+        blanco_match = "INSTR(UPPER(COALESCE(nombre_partido, '')), 'BLANCO') > 0"
+        nulo_match = "INSTR(UPPER(COALESCE(nombre_partido, '')), 'NULO') > 0"
     rows = conn.execute(
         f"""SELECT
               r.id AS run_id,
@@ -671,18 +677,18 @@ def get_onpe_run_summary_history(limit: int = 500) -> list[sqlite3.Row]:
                SELECT
                    run_id,
                    SUM(CASE
-                       WHEN UPPER(COALESCE(nombre_partido, '')) NOT LIKE '%BLANCO%'
-                        AND UPPER(COALESCE(nombre_partido, '')) NOT LIKE '%NULO%'
+                       WHEN NOT ({blanco_match})
+                        AND NOT ({nulo_match})
                        THEN COALESCE(votos_validos, 0)
                        ELSE 0
                    END) AS votos_validos_fallback,
                    SUM(CASE
-                       WHEN UPPER(COALESCE(nombre_partido, '')) LIKE '%BLANCO%'
+                       WHEN {blanco_match}
                        THEN COALESCE(votos_validos, 0)
                        ELSE 0
                    END) AS votos_blancos,
                    SUM(CASE
-                       WHEN UPPER(COALESCE(nombre_partido, '')) LIKE '%NULO%'
+                       WHEN {nulo_match}
                        THEN COALESCE(votos_validos, 0)
                        ELSE 0
                    END) AS votos_nulos,
