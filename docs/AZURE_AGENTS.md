@@ -3,6 +3,58 @@
 Objetivo: usar Azure solo como ejecutor programado de agentes. GitHub sigue
 siendo el repositorio, Supabase la base de datos y Streamlit la web publica.
 
+## Estado de la prueba Azure del 5 de junio de 2026
+
+Azure Container Apps Jobs se pudo crear y ejecutar, pero no quedo como solucion
+confiable para ONPE.
+
+Recursos creados y probados:
+
+- Resource group: `rg-segunda-vuelta-peru`
+- ACR: `acralelectoraldce54871`
+- Imagen: `acralelectoraldce54871.azurecr.io/segundavueltaperu-agents:latest`
+- Environment inicial: `env-electoral-agents` en `West US 2`
+- Job inicial: `job-electoral-scrapers`
+- Cron: `*/15 * * * *`
+- Secretos cargados en Azure: `database-url`, `jne-powerbi-url`
+
+Resultados:
+
+- Azure ejecuto el contenedor y guardo en Supabase.
+- JNE funciono desde Azure; logs validados con `JNE payload: tablas=3,
+  medidas=33`.
+- ONPE no funciono de forma confiable desde Azure; el scraper guardo capturas
+  vacias con `ONPE payload: totales=no, candidaturas=0`.
+- ONPE desde la PC Windows local, en el mismo periodo, si devolvio totales y 38
+  candidaturas.
+
+Diagnostico tecnico:
+
+- Local: endpoints ONPE devuelven JSON valido:
+  - `totals`: `status=200`, `len=489`, `success=True`, `data=dict`
+  - `candidates`: `status=200`, `len=9537`, `success=True`, `data=list:38`
+- Azure `West US 2`: endpoints ONPE devuelven HTML de la app:
+  - `status=200`, `len=35808`, `json_error=JSONDecodeError`
+- Azure `Brazil South`: mismo fallo que `West US 2`.
+- Azure `East US`: intermitente. En una muestra de 5 ejecuciones:
+  - 4 IPs de salida devolvieron JSON correcto con `candidates=list:38`.
+  - 1 IP de salida devolvio HTML `len=35808`.
+
+Conclusion: no es que ONPE no tenga actualizaciones. La API sigue devolviendo
+datos desde la red local. El problema es la salida de red/IP de Azure: algunos
+origenes reciben HTML donde deberian recibir JSON. Azure solo seria viable para
+ONPE si se controla el egress con una IP que se haya validado, por ejemplo con
+NAT Gateway en `East US`, o si se fuerza una resolucion/IP ONPE que devuelva
+JSON desde Azure.
+
+Recomendacion actual:
+
+- No usar el job Azure de `West US 2` como fuente principal ONPE.
+- Mantener Azure solo para JNE, o migrar ambos agentes a una salida no-Azure.
+- Si se quiere insistir con Azure, crear una prueba aislada en `East US` con
+  VNet + NAT Gateway + IP fija, ejecutar `scripts/onpe_diagnostic.py` varias
+  veces y solo promover a produccion si ONPE devuelve JSON estable.
+
 Esta guia esta pensada para ejecutarse desde la otra computadora Windows con el
 usuario GitHub/Azure `addmoeueperu`. Si aparece escrito como `addmoeperu` o
 `addmoeuperu` en una conversacion, confirmar la ortografia: en el repositorio el
@@ -42,6 +94,10 @@ python scripts/scrape_once.py
 ```
 
 cada 15 minutos y guarda una captura ONPE y una captura JNE en Supabase.
+
+Nota posterior a la prueba: este resultado esperado no se cumplio para ONPE en
+Azure sin egress controlado. Si se usa Azure, validar ONPE con
+`scripts/onpe_diagnostic.py` antes de confiar en el job programado.
 
 ## Por que no GitHub Actions como scheduler principal
 
@@ -377,10 +433,54 @@ Checklist:
 5. Revisar headers en `onpe_scraper.py`.
 6. Confirmar si ONPE bloquea o degrada IPs de nube.
 
+### Evidencia ya recolectada
+
+Se agrego `scripts/onpe_diagnostic.py` para comparar la respuesta ONPE por
+endpoint sin guardar datos ni exponer secretos. La salida esperada cuando ONPE
+funciona es:
+
+```text
+DIAG totals status=200 ... success=True data=dict:...
+DIAG candidates status=200 ... success=True data=list:38
+```
+
+La salida observada cuando Azure falla es:
+
+```text
+DIAG totals status=200 ... len=35808 ... json_error=JSONDecodeError
+DIAG candidates status=200 ... len=35808 ... json_error=JSONDecodeError
+```
+
+Ese `len=35808` coincide con la pagina HTML principal de ONPE, no con JSON de
+la API.
+
+### Regiones probadas
+
+| Region Azure | Resultado ONPE | Nota |
+|---|---|---|
+| `westus2` | Falla | API devuelve HTML, scraper guarda ONPE vacio |
+| `brazilsouth` | Falla | Igual que `westus2` |
+| `eastus` | Intermitente | 4/5 diagnosticos OK, 1/5 devolvio HTML |
+
+### Proxima prueba Azure si se insiste
+
+1. Crear un Container Apps Environment nuevo en `East US` dentro de VNet.
+2. Asociar NAT Gateway con IP publica fija.
+3. Ejecutar `scripts/onpe_diagnostic.py` varias veces.
+4. Promover esa configuracion solo si:
+
+```text
+ONPE totals: success=True data=dict
+ONPE candidates: success=True data=list:38
+```
+
+Si la IP fija falla, pasar ONPE a una maquina/red no-Azure.
+
 ## Operacion recomendada
 
 - Mantener GitHub Actions activado solo como respaldo.
-- Azure debe ser el scheduler principal.
+- Azure puede usarse para JNE, pero no debe ser el scheduler principal de ONPE
+  sin resolver la degradacion de red.
 - No borrar datos vacios sin diagnostico; sirven para monitoreo de fallos.
 - Si durante la jornada electoral ONPE/JNE cambian estructura, priorizar:
   1. que el scraper no caiga;

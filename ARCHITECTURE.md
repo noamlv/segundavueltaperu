@@ -10,7 +10,8 @@ modificar el dashboard, los scrapers, la base de datos o el despliegue.
 - Dashboard publico: Streamlit Community Cloud
 - Base productiva: Supabase/Postgres
 - Scheduler actual: GitHub Actions como respaldo, no como scheduler confiable
-- Scheduler pendiente: Azure Container Apps Jobs
+- Scheduler probado: Azure Container Apps Jobs funciona para JNE/Supabase, pero
+  no quedo apto para ONPE por degradacion de la API desde varias IPs Azure
 - Usuario colaborador operativo: `addmoeueperu`
 
 Nota de cuenta: en GitHub el colaborador aparece como `addmoeueperu`. Si en la
@@ -19,9 +20,11 @@ variante escrita y verificar la ortografia antes de conectar Azure. La tarea de
 Azure debe hacerse desde la otra computadora Windows usando la cuenta
 GitHub/Azure de `addmoeueperu`.
 
-El dashboard esta funcionando y lee datos desde Supabase. Lo que falta para la
-operacion electoral robusta es mover los agentes ONPE/JNE desde GitHub Actions a
-Azure Jobs para ejecutar `python scripts/scrape_once.py` cada 15 minutos.
+El dashboard esta funcionando y lee datos desde Supabase. Se probo mover los
+agentes ONPE/JNE desde GitHub Actions a Azure Jobs para ejecutar
+`python scripts/scrape_once.py` cada 15 minutos. Azure ejecuto y guardo en
+Supabase correctamente, pero ONPE devolvio respuestas degradadas desde IPs de
+Azure; por eso Azure no debe considerarse solucion cerrada para ONPE.
 
 ## Arquitectura objetivo
 
@@ -33,7 +36,7 @@ GitHub: noamlv/segundavueltaperu
         |                         \
         |                          \
         v                           v
-Streamlit Community Cloud        Azure Container Apps Job
+Streamlit Community Cloud        Scheduler de agentes
 dashboard.py                     scripts/scrape_once.py cada 15 min
         |                           |
         |                           v
@@ -42,8 +45,8 @@ dashboard.py                     scripts/scrape_once.py cada 15 min
 ```
 
 GitHub se mantiene como repositorio y fuente de verdad. Streamlit publica la
-web. Supabase guarda los datos. Azure reemplaza solamente a GitHub Actions como
-ejecutor programado de los agentes.
+web. Supabase guarda los datos. El scheduler debe ejecutar los agentes sin
+degradar ONPE; Azure quedo validado solo parcialmente.
 
 ## Componentes
 
@@ -99,21 +102,44 @@ postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.c
 No guardar la contrasena en GitHub ni en archivos del repo. Usarla solo como
 secret en Streamlit, GitHub Actions y Azure.
 
-### Azure pendiente
+### Azure probado
 
-La proxima tarea importante es crear un Azure Container Apps Job que ejecute:
+El 5 de junio de 2026 se creo y valido infraestructura Azure desde Windows con
+la cuenta institucional asociada a `addmoeueperu`:
+
+- Resource group: `rg-segunda-vuelta-peru`
+- ACR: `acralelectoraldce54871`
+- Environment productivo inicial: `env-electoral-agents` en `West US 2`
+- Job inicial: `job-electoral-scrapers`
+- Imagen: `acralelectoraldce54871.azurecr.io/segundavueltaperu-agents:latest`
+- Cron: `*/15 * * * *`
+
+El job ejecuta:
 
 ```bash
 python scripts/scrape_once.py
 ```
 
-cada 15 minutos, con estos secretos:
+con estos secretos:
 
 - `DATABASE_URL`
 - `JNE_POWERBI_URL`
 - `JNE_WAIT_SECONDS`
 
-Ver guia detallada en `docs/AZURE_AGENTS.md`.
+Resultados comprobados en logs:
+
+- Supabase/Postgres: guardado correcto.
+- JNE: correcto desde Azure; ejemplo validado `tablas=3, medidas=33`.
+- ONPE en `West US 2`: incorrecto; devuelve `totales=no, candidaturas=0`.
+- Diagnostico ONPE en `Brazil South`: incorrecto; los endpoints API devuelven
+  HTML de la app (`len=35808`) y no JSON.
+- Diagnostico ONPE en `East US`: parcialmente bueno; algunas IPs Azure
+  devuelven JSON y otras devuelven HTML. Sin IP fija, Container Apps puede
+  alternar entre salida buena y mala.
+
+Conclusion: Azure Container Apps Jobs sirve para ejecutar y guardar JNE, pero
+no es confiable para ONPE mientras la salida de red no este controlada. Ver guia
+detallada y bitacora en `docs/AZURE_AGENTS.md`.
 
 Prompt recomendado para Codex en la otra PC:
 
@@ -220,6 +246,21 @@ vacio, considerar:
 - correr ONPE desde otra region;
 - separar ONPE y JNE en jobs distintos;
 - usar un worker en una red que ONPE no degrade.
+
+Actualizacion del 5 de junio de 2026:
+
+- ONPE desde esta PC Windows local respondio correctamente: totales y 38
+  candidaturas.
+- ONPE desde Azure `West US 2` devolvio vacio en el scraper productivo.
+- Diagnostico endpoint por endpoint mostro que Azure `West US 2` recibia HTML
+  (`JSONDecodeError`) donde local recibia JSON.
+- `Brazil South` fallo igual que `West US 2`.
+- `East US` fue intermitente: 4 de 5 diagnosticos devolvieron JSON con 38
+  candidaturas, 1 de 5 devolvio HTML. Esto apunta a degradacion por IP de
+  salida, no a datos estabilizados.
+- DNS local resolvio `resultadoelectoral.onpe.gob.pe` a IPs `54.230.124.*`;
+  con `httpx` y DNS forzado local esas IPs devolvieron JSON. Falta validar si
+  forzar IP o usar NAT Gateway/IP fija desde Azure estabiliza ONPE.
 
 ## ONPE - REST API scraper
 
@@ -336,19 +377,22 @@ reconstruir la imagen de agentes cuando cambie codigo de scrapers o base.
 
 ## Tareas pendientes prioritarias
 
-Estas tareas debe completarlas preferentemente Codex en la otra PC, autenticado
-como `addmoeueperu`, porque esa cuenta tiene acceso a Azure institucional:
+Tareas pendientes despues de la prueba Azure:
 
-1. Crear `Dockerfile` para los agentes.
-2. Crear Azure Container Apps Environment.
-3. Crear Azure Container Registry o usar GitHub Container Registry.
-4. Crear Azure Container Apps Job programado cada 15 minutos.
-5. Configurar secretos en Azure.
-6. Ejecutar job manual y revisar logs:
-   - ONPE debe traer `totales=si` y candidaturas.
-   - JNE debe traer tablas y medidas.
-7. Si ONPE sale vacio desde Azure, separar diagnostico de ONPE y JNE.
-8. Dejar GitHub Actions como respaldo/manual, no como scheduler principal.
+1. Decidir scheduler definitivo para ONPE:
+   - maquina local/no-Azure con salida ya validada;
+   - self-hosted runner;
+   - otro proveedor;
+   - o Azure con egress controlado por NAT Gateway/IP fija si el diagnostico lo
+     confirma.
+2. Mantener JNE en Azure o migrarlo junto con ONPE para simplificar operacion.
+3. Si se insiste con Azure para ONPE, probar:
+   - Container Apps en `East US` con NAT Gateway e IP publica fija;
+   - `ONPE_FORCE_IP`/resolucion forzada hacia un edge ONPE que devuelva JSON;
+   - separar ONPE y JNE en jobs distintos para evitar que fallas ONPE afecten
+     JNE.
+4. No borrar capturas ONPE vacias: sirven como evidencia de degradacion de red.
+5. Dejar GitHub Actions como respaldo/manual, no como scheduler principal.
 
 ## Reglas de seguridad
 

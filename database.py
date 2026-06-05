@@ -47,11 +47,15 @@ def _dsn_target_summary(url: str) -> str:
     if not url:
         return "DATABASE_URL no está configurado."
     parsed = urlparse(url)
+    try:
+        port = parsed.port or "vacío"
+    except ValueError:
+        port = "inválido"
     return (
         f"scheme={parsed.scheme or 'vacío'}, "
         f"user={parsed.username or 'vacío'}, "
         f"host={parsed.hostname or 'vacío'}, "
-        f"port={parsed.port or 'vacío'}, "
+        f"port={port}, "
         f"database={parsed.path.lstrip('/') or 'vacío'}, "
         f"sslmode={parse_qs(parsed.query).get('sslmode', ['vacío'])[0]}."
     )
