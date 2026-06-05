@@ -13,6 +13,11 @@ modificar el dashboard, los scrapers, la base de datos o el despliegue.
 - Scheduler pendiente: Azure Container Apps Jobs
 - Usuario colaborador operativo: `addmoeuperu`
 
+Nota de cuenta: en GitHub el colaborador aparece como `addmoeuperu`. Si en la
+conversacion se escribe `addmoeperu`, verificar la ortografia antes de conectar
+Azure. La tarea de Azure debe hacerse desde la otra computadora Windows usando
+la cuenta GitHub/Azure de `addmoeuperu`.
+
 El dashboard esta funcionando y lee datos desde Supabase. Lo que falta para la
 operacion electoral robusta es mover los agentes ONPE/JNE desde GitHub Actions a
 Azure Jobs para ejecutar `python scripts/scrape_once.py` cada 15 minutos.
@@ -108,6 +113,17 @@ cada 15 minutos, con estos secretos:
 - `JNE_WAIT_SECONDS`
 
 Ver guia detallada en `docs/AZURE_AGENTS.md`.
+
+Prompt recomendado para Codex en la otra PC:
+
+```text
+Lee ARCHITECTURE.md y docs/AZURE_AGENTS.md. Estoy en Windows con el usuario
+GitHub addmoeuperu y una cuenta institucional de Azure. Necesito crear rapido
+los Azure Container Apps Jobs para este proyecto, correr scripts/scrape_once.py
+cada 15 minutos, guardar en Supabase y validar en logs que ONPE traiga totales
+y candidaturas y que JNE traiga tablas y medidas. Hazlo de principio a fin y no
+commitees secretos.
+```
 
 ## Desarrollo local en macOS
 
@@ -318,6 +334,9 @@ Streamlit redeploya el dashboard desde GitHub. Azure debera redeployar o
 reconstruir la imagen de agentes cuando cambie codigo de scrapers o base.
 
 ## Tareas pendientes prioritarias
+
+Estas tareas debe completarlas preferentemente Codex en la otra PC, autenticado
+como `addmoeuperu`, porque esa cuenta tiene acceso a Azure institucional:
 
 1. Crear `Dockerfile` para los agentes.
 2. Crear Azure Container Apps Environment.

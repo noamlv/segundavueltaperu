@@ -3,6 +3,36 @@
 Objetivo: usar Azure solo como ejecutor programado de agentes. GitHub sigue
 siendo el repositorio, Supabase la base de datos y Streamlit la web publica.
 
+Esta guia esta pensada para ejecutarse desde la otra computadora Windows con el
+usuario GitHub/Azure `addmoeuperu`. Si aparece escrito como `addmoeperu` en una
+conversacion, confirmar la ortografia: en el repositorio el colaborador visible
+es `addmoeuperu`.
+
+## Tarea para Codex en Windows
+
+Cuando se abra Codex en la otra computadora, pedirle:
+
+```text
+Lee ARCHITECTURE.md y docs/AZURE_AGENTS.md. Estoy en Windows con el usuario
+GitHub addmoeuperu y una cuenta institucional de Azure. Necesito crear rapido
+los Azure Container Apps Jobs para este proyecto, correr scripts/scrape_once.py
+cada 15 minutos, guardar en Supabase y validar en logs que ONPE traiga totales
+y candidaturas y que JNE traiga tablas y medidas. Hazlo de principio a fin y no
+commitees secretos.
+```
+
+La tarea concreta de esa sesion es:
+
+1. Clonar o actualizar `https://github.com/noamlv/segundavueltaperu`.
+2. Probar `DATABASE_URL` y `scripts/scrape_once.py` localmente.
+3. Crear el `Dockerfile` si todavia no existe.
+4. Crear Azure Container Registry o elegir GitHub Container Registry.
+5. Crear Azure Container Apps Environment.
+6. Crear Azure Container Apps Job con cron `*/15 * * * *`.
+7. Cargar secretos en Azure.
+8. Ejecutar el job manualmente y revisar logs.
+9. Confirmar que el dashboard ve nuevas capturas en Supabase.
+
 ## Resultado esperado
 
 Un Azure Container Apps Job ejecuta:
