@@ -1,26 +1,38 @@
 # Segunda vuelta de la Elección Presidencial Perú 2026
 
-Dashboard y scrapers para monitorear resultados ONPE y actas observadas del JNE con capturas históricas cada 15 minutos.
+Dashboard y scrapers para monitorear resultados ONPE y actas observadas del JNE con capturas históricas.
 
 ## Qué incluye
 
 - Dashboard Streamlit con Resumen, ONPE, JNE, Monitoreo y Actualización.
 - Scraper ONPE desde API pública.
 - Scraper JNE desde dashboard Power BI público.
-- Persistencia local en SQLite.
+- Persistencia local en SQLite como fallback.
 - Persistencia productiva en Supabase/Postgres usando `DATABASE_URL`.
-- Workflow de GitHub Actions para ejecutar ambos scrapers cada 15 minutos.
+- Workflow de GitHub Actions como respaldo/manual.
+- Arquitectura objetivo con Azure Container Apps Jobs para ejecutar agentes cada 15 minutos.
 
 ## Desarrollo local
+
+macOS/Linux:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
-python onpe_scraper.py --db
-python pbi_scraper.py --url "https://web.jne.gob.pe/reporteactasobservadas/" --db
 python -m streamlit run dashboard.py
+```
+
+Windows PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
+streamlit run dashboard.py
 ```
 
 Si `DATABASE_URL` no está configurado, el proyecto usa `data/electoral.db`.
@@ -32,9 +44,15 @@ Si `DATABASE_URL` no está configurado, el proyecto usa `data/electoral.db`.
 3. Guardarlo como `DATABASE_URL` en GitHub Actions y en el entorno de despliegue.
 4. Ejecutar `python scripts/scrape_once.py` una vez para crear tablas y cargar datos.
 
-## GitHub Actions
+## Scrapers
 
-El workflow `.github/workflows/scrape.yml` corre cada 15 minutos y también puede ejecutarse manualmente.
+Ejecutar una captura ONPE + JNE:
+
+```bash
+python scripts/scrape_once.py
+```
+
+El workflow `.github/workflows/scrape.yml` puede ejecutarse manualmente y queda como respaldo. GitHub Actions no debe considerarse scheduler estricto de 15 minutos.
 
 Secrets requeridos:
 
@@ -45,15 +63,26 @@ Variables opcionales:
 - `JNE_POWERBI_URL`
 - `JNE_WAIT_SECONDS`
 
-## Vercel
+## Azure
 
-El dashboard actual está hecho en Streamlit. Vercel es excelente para una app web Next.js, pero Streamlit necesita un proceso web persistente y no es el encaje natural de Vercel Serverless.
+La tarea pendiente principal es mover los agentes a Azure Container Apps Jobs para que corran cada 15 minutos con mayor estabilidad que GitHub Actions.
 
-Opciones:
+Guia detallada:
 
-- Mantener Streamlit para análisis interno/local y desplegar una versión Next.js en Vercel leyendo Supabase.
-- Desplegar Streamlit en un servicio compatible con procesos persistentes.
-- Usar Vercel para una futura capa pública y GitHub Actions/Supabase para datos.
+```text
+docs/AZURE_AGENTS.md
+```
+
+## Documentación para Codex
+
+Antes de continuar el proyecto desde otra computadora o usuario, leer:
+
+```text
+ARCHITECTURE.md
+docs/AZURE_AGENTS.md
+docs/DEPLOYMENT.md
+docs/DASHBOARD_BRIEF.md
+```
 
 ## Datos no versionados
 

@@ -1,4 +1,4 @@
-# Publicación: GitHub, Supabase y Streamlit Community Cloud
+# Publicación: GitHub, Supabase, Streamlit y Azure Agents
 
 ## 1. GitHub
 
@@ -41,7 +41,7 @@ DATABASE_URL = "postgresql://..."
 
 Streamlit Community Cloud ejecuta el dashboard. Los scrapers no deben depender del proceso de Streamlit.
 
-## 4. Scrapers cada 15 minutos
+## 4. Scrapers
 
 Configurar `DATABASE_URL` como GitHub Actions Secret.
 
@@ -51,12 +51,27 @@ El workflow `.github/workflows/scrape.yml` ejecuta:
 python scripts/scrape_once.py
 ```
 
-## 5. Vercel
+GitHub Actions queda como respaldo/manual. En pruebas del proyecto no entrego
+cadencia confiable cada 15 minutos y ONPE devolvio payload vacio desde runners
+de GitHub. La arquitectura objetivo es mover el scheduler principal a Azure
+Container Apps Jobs.
 
-La app actual es Streamlit. Para Vercel, el camino recomendado es construir una capa web Next.js que lea Supabase. El repositorio queda preparado para datos y dashboard analítico, pero no fuerza un `vercel.json` engañoso para Streamlit.
+## 5. Azure Container Apps Jobs
 
-Cuando se implemente la capa Next.js:
+Azure ejecutara los agentes programados. Debe correr:
 
-- Vercel recibirá `DATABASE_URL`.
-- La UI pública leerá tablas agregadas desde Supabase.
-- Los scrapers seguirán corriendo por GitHub Actions o un scheduler dedicado.
+```bash
+python scripts/scrape_once.py
+```
+
+cada 15 minutos y escribir en Supabase con los secretos:
+
+- `DATABASE_URL`
+- `JNE_POWERBI_URL`
+- `JNE_WAIT_SECONDS`
+
+Ver guia completa en:
+
+```text
+docs/AZURE_AGENTS.md
+```

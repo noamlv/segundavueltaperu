@@ -1,302 +1,345 @@
-# Monitoreo Electoral — Architecture & Data Reference
+# Segunda vuelta presidencial Peru 2026 - arquitectura y handoff para Codex
 
-## Stack
-- **Scrapers**: Playwright (JNE), `httpx[http2]` (ONPE REST API)
-- **Storage**: SQLite (`data/electoral.db`)
-- **Dashboard**: Streamlit + Plotly
+Este archivo es la memoria principal del proyecto. Codex debe leerlo antes de
+modificar el dashboard, los scrapers, la base de datos o el despliegue.
 
----
+## Estado actual
 
-## How to Run
+- Repositorio: `https://github.com/noamlv/segundavueltaperu`
+- Rama principal: `main`
+- Dashboard publico: Streamlit Community Cloud
+- Base productiva: Supabase/Postgres
+- Scheduler actual: GitHub Actions como respaldo, no como scheduler confiable
+- Scheduler pendiente: Azure Container Apps Jobs
+- Usuario colaborador operativo: `addmoeuperu`
+
+El dashboard esta funcionando y lee datos desde Supabase. Lo que falta para la
+operacion electoral robusta es mover los agentes ONPE/JNE desde GitHub Actions a
+Azure Jobs para ejecutar `python scripts/scrape_once.py` cada 15 minutos.
+
+## Arquitectura objetivo
+
+```text
+Codex / desarrollo local
+        |
+        v
+GitHub: noamlv/segundavueltaperu
+        |                         \
+        |                          \
+        v                           v
+Streamlit Community Cloud        Azure Container Apps Job
+dashboard.py                     scripts/scrape_once.py cada 15 min
+        |                           |
+        |                           v
+        +----------------------> Supabase/Postgres
+                                  snapshot historico ONPE/JNE
+```
+
+GitHub se mantiene como repositorio y fuente de verdad. Streamlit publica la
+web. Supabase guarda los datos. Azure reemplaza solamente a GitHub Actions como
+ejecutor programado de los agentes.
+
+## Componentes
+
+| Componente | Archivo/recurso | Rol |
+|---|---|---|
+| Dashboard | `dashboard.py` | UI Streamlit con Resumen, ONPE, JNE, Monitoreo y Actualizacion |
+| Base de datos | `database.py` | Adaptador SQLite local / Postgres Supabase productivo |
+| Scraper ONPE | `onpe_scraper.py` | Consulta API publica ONPE con `httpx[http2]` |
+| Scraper JNE | `pbi_scraper.py` | Extrae datos desde Power BI publico con Playwright |
+| Ejecucion una vez | `scripts/scrape_once.py` | Corre ONPE y JNE, guarda ambos en base |
+| Preflight DB | `scripts/check_database.py` | Valida conexion a Supabase sin exponer secretos |
+| Workflow respaldo | `.github/workflows/scrape.yml` | Corre scrapers, pero GitHub no garantiza cadencia exacta |
+| Guia Azure | `docs/AZURE_AGENTS.md` | Pasos para crear jobs programados en Azure |
+
+## Estado productivo actual
+
+### GitHub
+
+GitHub guarda el codigo y permite que Codex suba cambios. Tambien contiene un
+workflow de respaldo en `.github/workflows/scrape.yml`.
+
+Ese workflow tiene `schedule`, pero GitHub Actions no es adecuado como SLA de
+15 minutos. La documentacion oficial indica que los schedules pueden retrasarse
+o descartarse bajo carga. En las pruebas del proyecto, los runs programados
+saltaron por horas. Se conserva como respaldo y ejecucion manual.
+
+### Streamlit
+
+Streamlit Community Cloud publica el dashboard desde:
+
+- Repository: `noamlv/segundavueltaperu`
+- Branch: `main`
+- Main file path: `dashboard.py`
+
+Streamlit necesita el secreto:
+
+```toml
+DATABASE_URL = "postgresql://..."
+```
+
+Streamlit no debe ejecutar scrapers de forma programada. Solo lee Supabase y
+muestra visualizaciones.
+
+### Supabase
+
+Supabase/Postgres es la base productiva. El connection string usa el transaction
+pooler compatible con IPv4:
+
+```text
+postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require
+```
+
+No guardar la contrasena en GitHub ni en archivos del repo. Usarla solo como
+secret en Streamlit, GitHub Actions y Azure.
+
+### Azure pendiente
+
+La proxima tarea importante es crear un Azure Container Apps Job que ejecute:
 
 ```bash
-# JNE scraper (Power BI)
-python pbi_scraper.py --url "https://web.jne.gob.pe/reporteactasobservadas/" --db --repeat 900
+python scripts/scrape_once.py
+```
 
-# ONPE scraper (direct API)
-python onpe_scraper.py --db --repeat 900
+cada 15 minutos, con estos secretos:
 
-# Dashboard
+- `DATABASE_URL`
+- `JNE_POWERBI_URL`
+- `JNE_WAIT_SECONDS`
+
+Ver guia detallada en `docs/AZURE_AGENTS.md`.
+
+## Desarrollo local en macOS
+
+```bash
+cd "/Users/noam/Documents/GitHub/Electoral scrapping"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
 streamlit run dashboard.py
 ```
 
----
+Si `DATABASE_URL` no esta configurado, se usa SQLite local en
+`data/electoral.db`.
 
-## JNE — Power BI Scraper (`pbi_scraper.py`)
+## Desarrollo local en Windows
 
-**Source**: `https://web.jne.gob.pe/reporteactasobservadas/` (Power BI Publish to Web)
+En PowerShell, con la cuenta `addmoeuperu` autenticada en GitHub:
 
-**Method**: Playwright intercepts `/public/reports/querydata` POSTs. Parses DSR v2 (Data Shape Representation) — DM0/DM1 entries, R-bitmask sparse rows, Ø control segments.
+```powershell
+cd $HOME\Documents
+git clone https://github.com/noamlv/segundavueltaperu.git
+cd segundavueltaperu
 
-### Indicator KPIs (33 measures)
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m playwright install chromium
 
-Stored in `kpi_measures` with `measure_name`, `value` (text). Used in dashboard via `kpi_val()` / `fmt_pct()`.
+streamlit run dashboard.py
+```
 
-| measure_name | Meaning | Sample |
-|---|---|---|
-| `ActasObservadas.PorcentajeAvance` | % avance general | 0.9999 |
-| `ActasObservadas.PorcentajePronunciamientos` | % pronunciamientos | 0.9999 |
-| `ActasObservadas.ActasObservadas` | Total actas observadas | 98983 |
-| `ActasObservadas.ActasProcesadas` | Actas procesadas | 68519 |
-| `ActasObservadas.ExpedientesFaltantes` | Expedientes faltantes | 1 |
-| `ActasObservadas.MedidaAudienciasRealizadas` | Audiencias realizadas (#) | 2474 |
-| `ActasObservadas.%audienciasRealizadas` | % audiencias realizadas | 0.6459 |
-| `ActasObservadas.%audienciasProgramadas` | % audiencias programadas | 0 |
-| `ActasObservadas.%audienciasPendientes` | % audiencias pendientes | 0.0663 |
-| `ActasObservadas.OtrosPronunciamientos` | Otros pronunciamientos (#) | 30465 |
-| `ActasObservadas.PorcentajeActasSDM` | % Senado Distrito Múltiple | 0.2009 |
-| `ActasObservadas.PorcentajeActasSDU` | % Senado Distrito Único | 0.2629 |
-| `ActasObservadas.PorcentajeActasDiputados` | % Diputados | 0.2299 |
-| `ActasObservadas.PorcentajeActasParlamento` | % Parlamento Andino | 0.2141 |
-| `ActasObservadas.PorcentajeActasExtravSinies` | % Extraviadas/Siniestradas | 0.0047 |
-| `ActasObservadas.ActasEnTramite` | Actas en trámite | 2 |
-| `ActasObservadas.ActasRecuento` | Actas de recuento | 3830 |
-| `ActasObservadas.CantidadActasAtendidas` | Actas atendidas | 68518 |
-| `ActasObservadas.Expedientes_Ajustado` | Expedientes ajustado | 68520 |
-| `ActasObservadas.TotalExpedientes` | Total expedientes SD | 14672 |
-| `ActasObservadas.TotalExpedientes__1` | Total expedientes Pres | 5978 |
-| `ActasObservadas.TotalExpedientes__2` | Total expedientes SDM | 13767 |
-| `ActasObservadas.TotalExpedientes__3` | Total expedientes Dip | 15757 |
-| `ActasObservadas.TotalExpedientes__4` | Total expedientes SDU | 18018 |
-| `ActasObservadas.TotalExpedientes__5` | Total expedientes mixto | 328 |
-| `ActasObservadas.%ActasSinDigitalizar` | % sin digitalizar | 1.45e-05 |
-| `ActasObservadas.%ActasTramite` | % en trámite | 1.45e-05 |
-| `ActasObservadas.%audienciasRealizadasSinReconteo` | % audiencias sin reconteo | 0.2877 |
-| `ActasObservadas.MedidaAudienciasNoProgramadas` | Audiencias no programadas (#) | 254 |
-| `ActasObservadas.MedidaAudienciasRealizadasSinReconteo` | Audiencias realizadas sin reconteo (#) | 1102 |
-| `ActasObservadas.MedidaAudienciasProgramadas` | Audiencias programadas (#) | 0 |
-| `ActasObservadas.MedidaAudienciasNoProgramadas` | Audiencias no programadas (#) | 254 |
-| `ActasObservadas.FechaActualizacion` | Texto de última actualización | "Actualizado al 2026-06-02 12:07:38" |
+Para leer Supabase desde Windows durante una sesion local:
 
-### Tables (3)
+```powershell
+$env:DATABASE_URL="postgresql://postgres.<PROJECT_REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:6543/postgres?sslmode=require"
+streamlit run dashboard.py
+```
 
-**1. `actas_by_type`** — Actas completas por tipo de elección
+No escribir `DATABASE_URL` real en archivos versionados.
 
-| tipo_eleccion | actas_completas |
-|---|---|
-| PRESIDENCIA | 5978 |
-| SENADORES DISTRITO MÚLTIPLE | 13767 |
-| DIPUTADOS | 15757 |
-| SENADORES DISTRITO ÚNICO | 18017 |
-| PARLAMENTO ANDINO | 14672 |
-| MAS DE UN TIPO DE ELECCIÓN | 328 |
+## Variables y secretos
 
-**2. `jje_detail`** — Detalle por JEE (60 jurisdicciones)
-
-| Column | Type | Description |
-|---|---|---|
-| `jee_name` | TEXT | Nombre del JEE (ej. ABANCAY, AREQUIPA 1) |
-| `expedientes_completos` | INT | Expedientes completos |
-| `expedientes_ajustado` | INT | Expedientes ajustado |
-| `pct_pronunciamientos_sin_total` | REAL (≈%) | % pronunciamientos (0–1, puede ser None) |
-| `cantidad_actas_atendidas` | INT | Actas atendidas |
-
-**3. `jee_porcentaje`** — % de pronunciamientos por JEE (tabla separada del PBI)
-
-| Column | Type |
-|---|---|
-| `jee_name` | TEXT |
-| `porcentaje` | REAL (≈%) |
-
----
-
-## ONPE — REST API Scraper (`onpe_scraper.py`)
-
-**Base**: `https://resultadoelectoral.onpe.gob.pe/presentacion-backend`
-
-**Headers required**: HTTP/2 (`httpx[http2]`), `Accept: */*`, `Content-Type: application/json`, `Referer: …/presidenciales`.
-
-### Endpoints
-
-| Endpoint | Returns |
-|---|---|
-| `GET /proceso/proceso-electoral-activo` | Process metadata, `idEleccionPrincipal` |
-| `GET /proceso/{id}/elecciones` | Election list |
-| `GET /resumen-general/totales?idEleccion={id}&tipoFiltro=eleccion` | Totals KPIs |
-| `GET /eleccion-presidencial/participantes-ubicacion-geografica-nombre?idEleccion={id}&tipoFiltro=eleccion` | Candidates with votes (38 1ra vuelta, 2+BN 2da vuelta) |
-| `GET /mesa/totales?tipoFiltro=eleccion` | Mesa installation stats |
-| `GET /resumen-general/mapa-calor?idEleccion={id}&tipoFiltro=total` | National heatmap |
-
-> ⚠️ `tipoFiltro=departamento` returns 204 — likely needs POST body or interaction context.
-
-### Raw API Fields → DB mapping
-
-**`onpe_totals`** — one row per run
-
-| DB column | API field | Type | Description |
+| Nombre | Donde se usa | Requerido | Descripcion |
 |---|---|---|---|
-| `actas_contabilizadas` | `actasContabilizadas` | REAL (%) | % actas contabilizadas |
-| `contabilizadas` | `contabilizadas` | INT (#) | Actas contabilizadas |
-| `total_actas` | `totalActas` | INT (#) | Total de actas |
-| `participacion` | `participacionCiudadana` | REAL (%) | Participación ciudadana |
-| `votos_emitidos` | `totalVotosEmitidos` | INT (#) | Total votos emitidos |
-| `votos_validos` | `totalVotosValidos` | INT (#) | Total votos válidos |
-| `enviadas_jee` | `enviadasJee` | INT (#) | Actas enviadas al JEE |
-| `actas_enviadas_jee` | `actasEnviadasJee` | REAL (%) | % enviadas al JEE |
-| `pendientes_jee` | `pendientesJee` | INT (#) | Actas pendientes JEE |
-| `actas_pendientes_jee` | `actasPendientesJee` | REAL (%) | % pendientes JEE |
-| `porcentaje_votos_validos` | `porcentajeVotosValidos` | REAL (%) | % votos válidos |
-| `porcentaje_votos_emitidos` | `porcentajeVotosEmitidos` | REAL (%) | % votos emitidos |
-| `fec_actualizacion` | `fechaActualizacion` | TEXT (ms timestamp) | Actualizado (convertir: `dt.fromtimestamp(int/1000)`) |
+| `DATABASE_URL` | Streamlit, Azure, GitHub Actions, local opcional | Si en produccion | URL Postgres/Supabase con `sslmode=require` |
+| `JNE_POWERBI_URL` | Azure/GitHub Actions | Opcional | URL del reporte JNE; default en codigo |
+| `JNE_WAIT_SECONDS` | Azure/GitHub Actions | Opcional | Tiempo de espera para que Power BI cargue; default `25` |
 
-**`onpe_mesas`** — one row per run
+## Modelo de datos
 
-| DB column | API field | Description |
-|---|---|---|
-| `instaladas` | `mesasInstaladas` | Mesas instaladas |
-| `no_instaladas` | `mesasNoInstaladas` | Mesas no instaladas |
-| `pendientes` | `mesasPendientes` | Mesas pendientes (first round: 0) |
+Todas las capturas se ordenan por `scrape_runs.id`.
 
-**`onpe_candidates`** — one row per candidate per run
+```text
+scrape_runs
+  id, source, scraped_at, created_at
+  source = 'onpe' o 'jne'
 
-| DB column | API field | Description |
-|---|---|---|
-| `nombre_partido` | `nombreAgrupacionPolitica` | "FUERZA POPULAR" |
-| `codigo_partido` | `codigoAgrupacionPolitica` | "8" |
-| `nombre_candidato` | `nombreCandidato` | "KEIKO SOFIA FUJIMORI HIGUCHI" |
-| `dni_candidato` | `dniCandidato` | "10001088" |
-| `votos_validos` | `totalVotosValidos` | # votos válidos |
-| `pct_validos` | `porcentajeVotosValidos` | % sobre válidos (null para blanco/nulo) |
-| `pct_emitidos` | `porcentajeVotosEmitidos` | % sobre emitidos |
+JNE
+  kpi_measures     -> run_id, measure_name, value
+  jje_detail       -> run_id, jee_name, expedientes_completos, ...
+  actas_by_type    -> run_id, tipo_eleccion, actas_completas
+  jee_porcentaje   -> run_id, jee_name, porcentaje
 
-### Form Output (`onpe_form_*.json`)
-
-Reformats raw API into Google Form structure:
-
-```json
-{
-  "actas": {
-    "total": 92766,
-    "contabilizadas_num": 92766,
-    "contabilizadas_pct": 100.0,
-    "envio_jee_num": 0,
-    "envio_jee_pct": 0.0,
-    "pendientes_num": 0,
-    "pendientes_pct": 0.0
-  },
-  "candidatos": {
-    "keiko": { "votos": 2877678, "pct_validos": 17.192, "pct_emitidos": 14.269 },
-    "roberto": { "votos": 2015114, "pct_validos": 12.039, "pct_emitidos": 9.992 }
-  },
-  "blancos_nulos": {
-    "blanco": { "votos": 2372895, "pct_validos": null, "pct_emitidos": 11.766 },
-    "nulo": { "votos": 1056811, "pct_validos": null, "pct_emitidos": 5.24 }
-  },
-  "totales": {
-    "votos_validos_num": 16738039,
-    "votos_validos_pct": 100,
-    "votos_emitidos_num": 20167745,
-    "votos_emitidos_pct": 100,
-    "participacion": 73.806
-  }
-}
+ONPE
+  onpe_totals      -> run_id, actas, participacion, votos, fecha
+  onpe_mesas       -> run_id, instaladas, no_instaladas, pendientes
+  onpe_candidates  -> run_id, partido, candidato, votos, porcentajes
 ```
 
-> ⚠️ Note: `VOTOS EN BLANCO` has `porcentajeVotosValidos: null` (0% of valid votes by definition). `VOTOS NULOS` also has null pct_validos.
+El dashboard usa historicos para mostrar evolucion temporal. Una captura vacia
+no debe borrar datos validos anteriores.
 
----
+## Hallazgo operativo importante sobre ONPE
 
-## Database Schema (`data/electoral.db`)
+El 4 de junio de 2026 se verifico:
 
+- ONPE responde bien desde la maquina local: totales y 38 candidaturas.
+- ONPE responde vacio desde GitHub Actions: `totales=no, candidaturas=0`.
+- JNE responde bien desde GitHub Actions.
+
+Por eso `get_onpe_latest()` en `database.py` busca la ultima captura ONPE valida
+que tenga totales o candidaturas. Las consultas ONPE vacias siguen quedando
+registradas en `scrape_runs` para monitoreo operativo, pero no reemplazan el
+ultimo dato valido del dashboard.
+
+Azure debe probarse especificamente contra ONPE. Si Azure tambien recibe ONPE
+vacio, considerar:
+
+- ajustar headers/sesion del scraper ONPE;
+- correr ONPE desde otra region;
+- separar ONPE y JNE en jobs distintos;
+- usar un worker en una red que ONPE no degrade.
+
+## ONPE - REST API scraper
+
+Base:
+
+```text
+https://resultadoelectoral.onpe.gob.pe/presentacion-backend
 ```
-scrape_runs          → id, source, scraped_at, created_at
-│
-├── kpi_measures     → run_id, measure_name, value          (JNE)
-├── jje_detail       → run_id, jee_name, expedientes*       (JNE)
-├── actas_by_type    → run_id, tipo_eleccion, actas_completas (JNE)
-├── jee_porcentaje   → run_id, jee_name, porcentaje         (JNE)
-│
-├── onpe_totals      → run_id, actas_contabilizadas, …      (ONPE)
-├── onpe_mesas       → run_id, instaladas, …                (ONPE)
-└── onpe_candidates  → run_id, nombre_partido, votos*, …     (ONPE)
+
+Endpoints usados:
+
+| Endpoint | Uso |
+|---|---|
+| `/proceso/proceso-electoral-activo` | Detectar proceso e `idEleccionPrincipal` |
+| `/resumen-general/totales?idEleccion={id}&tipoFiltro=eleccion` | KPIs generales |
+| `/mesa/totales?tipoFiltro=eleccion` | Mesas |
+| `/eleccion-presidencial/participantes-ubicacion-geografica-nombre?idEleccion={id}&tipoFiltro=eleccion` | Candidaturas y votos |
+| `/resumen-general/mapa-calor?idEleccion={id}&tipoFiltro=total` | Mapa/calor |
+
+Notas:
+
+- Requiere HTTP/2 (`httpx[http2]`).
+- El scraper visita primero la pagina presidencial para establecer contexto.
+- En segunda vuelta deberian aparecer dos candidaturas principales mas blancos
+  y nulos.
+
+## JNE - Power BI scraper
+
+Fuente:
+
+```text
+https://web.jne.gob.pe/reporteactasobservadas/
 ```
 
-All ONPE and JNE tables are linked via `scrape_runs.id = *_tables.run_id`.
+Metodo:
 
----
+- Playwright carga el reporte publico.
+- Intercepta respuestas `/public/reports/querydata`.
+- Parseo DSR v2: `DM0..DMN`, `R` bitmask, segmentos `S` y `C`.
+- Guarda medidas en `kpi_measures` y tablas en `jje_detail`, `actas_by_type` y
+  `jee_porcentaje`.
 
-## Dashboard Pages (`dashboard.py`)
+KPIs principales usados por el dashboard:
 
-| Sidebar option | Page | Key features |
-|---|---|---|
-| 🔵 ONPE — Actual | `ONPE — Actual` | Formulario Secciones 2–5 (Actas, Candidatos, Blancos/Nulos, Totales) |
-| 🔵 ONPE — Histórico | `ONPE — Histórico` | Líneas: actas, participación, candidatos, tabla histórica |
-| 🔴 JNE — Actual | `JNE — Actual` | KPIs en 3 filas de 5, barras por tipo de elección, treemap + tabla de 60 JEEs |
-| 🔴 JNE — Histórico | `JNE — Histórico` | Selector de KPI → línea temporal, selector JEE → evolución |
+| Measure | Lectura |
+|---|---|
+| `ActasObservadas.PorcentajeAvance` | Avance general |
+| `ActasObservadas.ActasObservadas` | Actas observadas |
+| `ActasObservadas.ActasProcesadas` | Actas observadas con expedientes creados |
+| `ActasObservadas.ActasEnTramite` | Expedientes en tramite |
+| `ActasObservadas.ActasRecuento` | Actas enviadas a recuento |
+| `ActasObservadas.MedidaAudienciasRealizadas` | Audiencias realizadas |
+| `ActasObservadas.ExpedientesFaltantes` | Expedientes faltantes |
+| `ActasObservadas.FechaActualizacion` | Fecha oficial del reporte |
 
-Product/dashboard planning is captured in [`docs/DASHBOARD_BRIEF.md`](docs/DASHBOARD_BRIEF.md). That brief is the working contract for the future public site: ONPE first, then JNE; each source gets an "Actual" view that mirrors the official site and an "Evolución" view powered by 15-minute snapshots.
+Si el Power BI cambia nombres internos, revisar `KPI_LABELS` y usos de
+`kpi_value()` en `dashboard.py`.
 
----
+## Dashboard
 
-## Production Direction
+Titulo:
 
-Current local development uses SQLite (`data/electoral.db`). This is good for fast iteration and offline scraping.
+```text
+Segunda vuelta de la Eleccion Presidencial Peru 2026
+```
 
-Target production architecture:
+Caption:
 
-- **GitHub**: source control, branches, pull requests, CI.
-- **Supabase/PostgreSQL**: durable remote database for scraper snapshots.
-- **Vercel**: public frontend/API hosting when the dashboard moves beyond local Streamlit.
-- **Scheduled scraper worker**: runs ONPE and JNE scrapers every 15 minutes and writes immutable run rows.
+```text
+Seguimiento de los datos electorales publicados por la ONPE y el JNE, con capturas periodicas para analizar avance y evolucion temporal.
+```
 
-Migration approach:
+Pestanas:
 
-1. Keep SQLite as the local fallback.
-2. Add `DATABASE_URL` support.
-3. Move schema changes into explicit migrations.
-4. Translate SQLite-specific SQL (`INSERT OR IGNORE`, autoincrement behavior, pragmas) to a Postgres-compatible adapter.
-5. Preserve the current `scrape_runs` snapshot model so historical charts keep working.
+- `Resumen`
+- `ONPE`
+  - `Actual`
+  - `Evolucion`
+- `JNE`
+  - `Actual`
+  - `Evolucion`
+- `Monitoreo`
+- `Actualizacion`
 
----
+Lenguaje de usuario:
 
-## Critical Notes for Cursor/Codex
+- Usar "consultas", no "corridas".
+- Evitar jerga de scraping en textos visibles.
+- Los cards deben explicar indicadores en lenguaje electoral.
 
-### PBI Scraper (`pbi_scraper.py`)
-- Intercepts `/public/reports/querydata` responses
-- DSR v2 parsing: DM0..DMN, R bitmask (1=null), Ø=control segment, S=schema, C=cell values
-- KPI values may have `L`/`D` suffixes → strip with `_clean_pbi_number()`
-- The Power BI report may change its internal measure names → update `dashboard.py` KPI lookup names
-- `--pages` flag cycles through report pages via `postMessage({action: 'setPage', pageName: …})`
+## Flujo de cambios con Codex
 
-### ONPE Scraper (`onpe_scraper.py`)
-- **Requires HTTP/2** — CloudFront blocks HTTP/1.1 API calls, returns Angular HTML
-- Uses `httpx.AsyncClient(http2=True)` — requires `pip install httpx[http2]`
-- First visits `…/main/presidenciales` to establish session cookies (optional but safer)
-- Second round (post-Jun 7) should return only 2 candidates + blancos + nulos
+Para cualquier Codex en cualquier computadora:
 
-### Dashboard (`dashboard.py`)
-- `fmt_num()` handles `None` and string values (JNE KPIs returning "—")
-- `fmt_pct()` assumes values <1 are fractions (0.85→85.00%), values ≥1 are already percent
-- ONPE pages query DB with `get_onpe_latest()` which uses `source='onpe'`
-- Historical pages need ≥2 runs to display charts
+1. Leer este archivo.
+2. Revisar `git status --short`.
+3. Hacer cambios pequenos y verificables.
+4. Ejecutar al menos:
 
-### Database (`database.py`)
-- `save_run()` and `save_run_onpe()` auto-create tables via `init_db()`
-- `init_db()` has migration logic with `ALTER TABLE ADD COLUMN` wrapped in try/except
-- `get_run_timestamps()` must return `source` column (needed to filter by source)
+```bash
+python -m py_compile dashboard.py database.py scripts/scrape_once.py
+```
 
----
+5. Si se toca dashboard, probar localmente:
 
-## Design TODO (restore with images)
+```bash
+streamlit run dashboard.py
+```
 
-To match the original Google Form / electoral dashboard design, capture screenshots of:
+6. Commit y push a `main` si el usuario lo pide o si el cambio debe desplegar.
 
-1. **ONPE "Segunda Vuelta" candidate banner** — add header image with KEIKO vs ROBERTO photos side by side with party logos
-2. **JNE layout** — capture the JNE PBI report layout and re-create column groupings and color scheme
-3. **Progress gauges** — replace numeric KPIs with circular gauge charts (Plotly `indicator` with `gauge`) for percentage metrics
-4. **Party colors** — Fuerza Popular = #FDC300 (orange/gold), Juntos por el Perú = #00843D (green)
-5. **ONPE Actual section numbering** — mirror the exact order: 1–7 (Actas), 8–9 (Candidatos), 10–11 (Blancos/Nulos), 12 (Totales)
-6. **Auto-scroll to KPIs** — add `st.empty()` anchors for direct section navigation
-7. **Responsive layout** — collapse to fewer columns on mobile
+Streamlit redeploya el dashboard desde GitHub. Azure debera redeployar o
+reconstruir la imagen de agentes cuando cambie codigo de scrapers o base.
 
-Place reference images in `docs/` folder and reference them here.
+## Tareas pendientes prioritarias
 
----
+1. Crear `Dockerfile` para los agentes.
+2. Crear Azure Container Apps Environment.
+3. Crear Azure Container Registry o usar GitHub Container Registry.
+4. Crear Azure Container Apps Job programado cada 15 minutos.
+5. Configurar secretos en Azure.
+6. Ejecutar job manual y revisar logs:
+   - ONPE debe traer `totales=si` y candidaturas.
+   - JNE debe traer tablas y medidas.
+7. Si ONPE sale vacio desde Azure, separar diagnostico de ONPE y JNE.
+8. Dejar GitHub Actions como respaldo/manual, no como scheduler principal.
 
-## Roadmap
+## Reglas de seguridad
 
-- [ ] Add sub-national breakdowns (departamento/provincia) — likely need POST params
-- [ ] Deploy on server (Railway/Fly.io) with Streamlit + 15-min scraper cron
-- [ ] Second round polish (Jun 7, 5pm → live data with 2 candidates)
-- [ ] Add map (choropleth) for geographical results (ONPE heatmap endpoint exists)
-- [ ] Alert system — push notification when new data differs significantly
+- Nunca commitear contrasenas, `DATABASE_URL` real, tokens ni claves Azure.
+- Usar secrets en Streamlit, GitHub Actions y Azure.
+- No borrar datos de Supabase sin confirmacion explicita.
+- No revertir cambios de otros colaboradores sin revisar.
+
+## Referencias utiles
+
+- Guia Azure del proyecto: `docs/AZURE_AGENTS.md`
+- Publicacion: `docs/DEPLOYMENT.md`
+- Brief del dashboard: `docs/DASHBOARD_BRIEF.md`
+- Imagenes de referencia: `docs/reference_images/README.md`
