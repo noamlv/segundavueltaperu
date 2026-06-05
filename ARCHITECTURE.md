@@ -11,12 +11,13 @@ modificar el dashboard, los scrapers, la base de datos o el despliegue.
 - Base productiva: Supabase/Postgres
 - Scheduler actual: GitHub Actions como respaldo, no como scheduler confiable
 - Scheduler pendiente: Azure Container Apps Jobs
-- Usuario colaborador operativo: `addmoeuperu`
+- Usuario colaborador operativo: `addmoeueperu`
 
-Nota de cuenta: en GitHub el colaborador aparece como `addmoeuperu`. Si en la
-conversacion se escribe `addmoeperu`, verificar la ortografia antes de conectar
-Azure. La tarea de Azure debe hacerse desde la otra computadora Windows usando
-la cuenta GitHub/Azure de `addmoeuperu`.
+Nota de cuenta: en GitHub el colaborador aparece como `addmoeueperu`. Si en la
+conversacion aparece como `addmoeperu` o `addmoeuperu`, tratarlo como una
+variante escrita y verificar la ortografia antes de conectar Azure. La tarea de
+Azure debe hacerse desde la otra computadora Windows usando la cuenta
+GitHub/Azure de `addmoeueperu`.
 
 El dashboard esta funcionando y lee datos desde Supabase. Lo que falta para la
 operacion electoral robusta es mover los agentes ONPE/JNE desde GitHub Actions a
@@ -118,7 +119,7 @@ Prompt recomendado para Codex en la otra PC:
 
 ```text
 Lee ARCHITECTURE.md y docs/AZURE_AGENTS.md. Estoy en Windows con el usuario
-GitHub addmoeuperu y una cuenta institucional de Azure. Necesito crear rapido
+GitHub addmoeueperu y una cuenta institucional de Azure. Necesito crear rapido
 los Azure Container Apps Jobs para este proyecto, correr scripts/scrape_once.py
 cada 15 minutos, guardar en Supabase y validar en logs que ONPE traiga totales
 y candidaturas y que JNE traiga tablas y medidas. Hazlo de principio a fin y no
@@ -142,7 +143,7 @@ Si `DATABASE_URL` no esta configurado, se usa SQLite local en
 
 ## Desarrollo local en Windows
 
-En PowerShell, con la cuenta `addmoeuperu` autenticada en GitHub:
+En PowerShell, con la cuenta `addmoeueperu` autenticada en GitHub:
 
 ```powershell
 cd $HOME\Documents
@@ -336,7 +337,7 @@ reconstruir la imagen de agentes cuando cambie codigo de scrapers o base.
 ## Tareas pendientes prioritarias
 
 Estas tareas debe completarlas preferentemente Codex en la otra PC, autenticado
-como `addmoeuperu`, porque esa cuenta tiene acceso a Azure institucional:
+como `addmoeueperu`, porque esa cuenta tiene acceso a Azure institucional:
 
 1. Crear `Dockerfile` para los agentes.
 2. Crear Azure Container Apps Environment.

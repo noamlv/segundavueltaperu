@@ -4,9 +4,9 @@ Objetivo: usar Azure solo como ejecutor programado de agentes. GitHub sigue
 siendo el repositorio, Supabase la base de datos y Streamlit la web publica.
 
 Esta guia esta pensada para ejecutarse desde la otra computadora Windows con el
-usuario GitHub/Azure `addmoeuperu`. Si aparece escrito como `addmoeperu` en una
-conversacion, confirmar la ortografia: en el repositorio el colaborador visible
-es `addmoeuperu`.
+usuario GitHub/Azure `addmoeueperu`. Si aparece escrito como `addmoeperu` o
+`addmoeuperu` en una conversacion, confirmar la ortografia: en el repositorio el
+colaborador visible es `addmoeueperu`.
 
 ## Tarea para Codex en Windows
 
@@ -14,7 +14,7 @@ Cuando se abra Codex en la otra computadora, pedirle:
 
 ```text
 Lee ARCHITECTURE.md y docs/AZURE_AGENTS.md. Estoy en Windows con el usuario
-GitHub addmoeuperu y una cuenta institucional de Azure. Necesito crear rapido
+GitHub addmoeueperu y una cuenta institucional de Azure. Necesito crear rapido
 los Azure Container Apps Jobs para este proyecto, correr scripts/scrape_once.py
 cada 15 minutos, guardar en Supabase y validar en logs que ONPE traiga totales
 y candidaturas y que JNE traiga tablas y medidas. Hazlo de principio a fin y no
@@ -58,7 +58,7 @@ JNE payload: tablas>=1, medidas>=1
 
 ## Requisitos
 
-En la computadora Windows con la cuenta `addmoeuperu`:
+En la computadora Windows con la cuenta `addmoeueperu`:
 
 - Git instalado.
 - Python 3.11 instalado.
