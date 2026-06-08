@@ -52,12 +52,25 @@ Ejecutar una captura ONPE + JNE:
 python scripts/scrape_once.py
 ```
 
+Ejecutar solo ONPE mientras la segunda vuelta se actualiza rapido:
+
+```bash
+python scripts/scrape_once.py --source onpe
+```
+
 Reiniciar el historico para una nueva etapa electoral, por ejemplo segunda
 vuelta:
 
 ```bash
 python scripts/reset_snapshots.py --yes-reset-election-data
 python scripts/scrape_once.py
+```
+
+Reiniciar solo JNE cuando el JNE todavia no publica segunda vuelta o sigue
+mostrando datos anteriores:
+
+```bash
+python scripts/reset_snapshots.py --source jne --yes-reset-election-data
 ```
 
 Este reinicio borra las capturas ONPE/JNE guardadas en la base configurada por

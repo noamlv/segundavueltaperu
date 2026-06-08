@@ -8,6 +8,7 @@ there.
 from __future__ import annotations
 
 import asyncio
+import argparse
 import os
 import sys
 from datetime import datetime
@@ -43,7 +44,7 @@ def _pbi_raw_payload(results: dict) -> dict:
     return raw
 
 
-async def main() -> None:
+async def run_onpe() -> None:
     print("Running ONPE scraper...")
     onpe_raw = await scrape_onpe()
     onpe_payload = {"_meta": {"timestamp": datetime.now().isoformat()}, **serialize(onpe_raw)}
@@ -59,6 +60,8 @@ async def main() -> None:
     onpe_run_id = save_run_onpe(onpe_payload)
     print(f"ONPE saved as run_id={onpe_run_id}")
 
+
+async def run_jne() -> None:
     print("Running JNE Power BI scraper...")
     url = os.getenv("JNE_POWERBI_URL", JNE_DEFAULT_URL)
     wait_seconds = int(os.getenv("JNE_WAIT_SECONDS", "25"))
@@ -72,6 +75,22 @@ async def main() -> None:
     jne_payload = _pbi_raw_payload(jne_results)
     jne_run_id = save_run(jne_payload, source="jne")
     print(f"JNE saved as run_id={jne_run_id}")
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Run electoral scrapers once and persist results.")
+    parser.add_argument(
+        "--source",
+        choices=["all", "onpe", "jne"],
+        default=os.getenv("SCRAPE_SOURCE", "all"),
+        help="Which source to scrape. Default: all.",
+    )
+    args = parser.parse_args()
+
+    if args.source in ("all", "onpe"):
+        await run_onpe()
+    if args.source in ("all", "jne"):
+        await run_jne()
 
 
 if __name__ == "__main__":
