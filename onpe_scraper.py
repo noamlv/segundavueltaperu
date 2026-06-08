@@ -13,19 +13,22 @@ import asyncio
 import json
 import argparse
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-BASE_API = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend"
+ONPE_HOST = os.getenv("ONPE_HOST", "resultadosegundavuelta.onpe.gob.pe").strip()
+ONPE_MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{ONPE_HOST}/main/presidenciales").strip()
+BASE_API = os.getenv("ONPE_BASE_API", f"https://{ONPE_HOST}/presentacion-backend").strip()
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     "Accept": "*/*",
     "Accept-Language": "es-419,es;q=0.9",
     "Content-Type": "application/json",
-    "Referer": "https://resultadoelectoral.onpe.gob.pe/main/presidenciales",
+    "Referer": ONPE_MAIN_URL,
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin",
@@ -54,7 +57,7 @@ async def scrape() -> dict:
     """Scrape ONPE data and return structured dict."""
     async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, http2=True) as client:
         # Visit main page to establish session
-        await client.get("https://resultadoelectoral.onpe.gob.pe/main/presidenciales")
+        await client.get(ONPE_MAIN_URL)
 
         # 1. Active process info
         process = await fetch_json(client, "/proceso/proceso-electoral-activo")

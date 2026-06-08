@@ -11,15 +11,16 @@ from contextlib import contextmanager
 import httpx
 
 
-HOST = "resultadoelectoral.onpe.gob.pe"
-BASE_API = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend"
+HOST = os.getenv("ONPE_HOST", "resultadosegundavuelta.onpe.gob.pe").strip()
+MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{HOST}/main/presidenciales").strip()
+BASE_API = os.getenv("ONPE_BASE_API", f"https://{HOST}/presentacion-backend").strip()
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     "Accept": "*/*",
     "Accept-Language": "es-419,es;q=0.9",
     "Content-Type": "application/json",
-    "Referer": "https://resultadoelectoral.onpe.gob.pe/main/presidenciales",
+    "Referer": MAIN_URL,
     "Sec-Fetch-Dest": "empty",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Site": "same-origin",
@@ -69,8 +70,9 @@ async def _run() -> None:
         except Exception as exc:
             ip = f"ip_error:{type(exc).__name__}"
         print(f"DIAG source_ip={ip}")
+        print(f"DIAG host={HOST} main_url={MAIN_URL} base_api={BASE_API}")
 
-        main_page = await client.get("https://resultadoelectoral.onpe.gob.pe/main/presidenciales")
+        main_page = await client.get(MAIN_URL)
         print(
             "DIAG main "
             f"status={main_page.status_code} "

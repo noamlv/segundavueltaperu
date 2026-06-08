@@ -52,6 +52,18 @@ Ejecutar una captura ONPE + JNE:
 python scripts/scrape_once.py
 ```
 
+Reiniciar el historico para una nueva etapa electoral, por ejemplo segunda
+vuelta:
+
+```bash
+python scripts/reset_snapshots.py --yes-reset-election-data
+python scripts/scrape_once.py
+```
+
+Este reinicio borra las capturas ONPE/JNE guardadas en la base configurada por
+`DATABASE_URL`. No ejecutar sin confirmar que se quiere empezar el historico en
+cero.
+
 El workflow `.github/workflows/scrape.yml` puede ejecutarse manualmente y queda como respaldo. GitHub Actions no debe considerarse scheduler estricto de 15 minutos.
 
 Secrets requeridos:

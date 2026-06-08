@@ -13,6 +13,7 @@ modificar el dashboard, los scrapers, la base de datos o el despliegue.
 - Scheduler probado: Azure Container Apps Jobs funciona para JNE/Supabase, pero
   no quedo apto para ONPE por degradacion de la API desde varias IPs Azure
 - Usuario colaborador operativo: `addmoeueperu`
+- ONPE default actual: `https://resultadosegundavuelta.onpe.gob.pe/main/presidenciales`
 
 Nota de cuenta: en GitHub el colaborador aparece como `addmoeueperu`. Si en la
 conversacion aparece como `addmoeperu` o `addmoeuperu`, tratarlo como una
@@ -226,7 +227,41 @@ ONPE
 El dashboard usa historicos para mostrar evolucion temporal. Una captura vacia
 no debe borrar datos validos anteriores.
 
-## Hallazgo operativo importante sobre ONPE
+## ONPE segunda vuelta - 7 de junio de 2026
+
+La web oficial de segunda vuelta esta publicada en:
+
+```text
+https://resultadosegundavuelta.onpe.gob.pe/main/presidenciales
+```
+
+El backend mantiene el patron:
+
+```text
+https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend
+```
+
+Verificacion local del 7 de junio de 2026:
+
+- Proceso activo: `SEGUNDA ELECCION PRESIDENCIAL 2026`.
+- `idEleccionPrincipal`: `10`.
+- `totals`: JSON valido.
+- `mesas`: JSON valido.
+- `candidates`: JSON valido con 4 filas: dos candidaturas, votos en blanco y
+  votos nulos.
+- `heatmap`: JSON valido.
+
+`onpe_scraper.py` y `scripts/onpe_diagnostic.py` usan este dominio como default
+desde el 7 de junio. Se puede sobreescribir con:
+
+- `ONPE_HOST`
+- `ONPE_MAIN_URL`
+- `ONPE_BASE_API`
+
+Antes de iniciar el historico de segunda vuelta se debe limpiar la base
+productiva de capturas de prueba/primera vuelta.
+
+## Hallazgo operativo previo sobre ONPE
 
 El 4 de junio de 2026 se verifico:
 
@@ -264,10 +299,10 @@ Actualizacion del 5 de junio de 2026:
 
 ## ONPE - REST API scraper
 
-Base:
+Base actual:
 
 ```text
-https://resultadoelectoral.onpe.gob.pe/presentacion-backend
+https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend
 ```
 
 Endpoints usados:

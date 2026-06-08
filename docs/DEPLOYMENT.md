@@ -51,6 +51,16 @@ El workflow `.github/workflows/scrape.yml` ejecuta:
 python scripts/scrape_once.py
 ```
 
+Para empezar una nueva ventana historica desde cero:
+
+```bash
+python scripts/reset_snapshots.py --yes-reset-election-data
+python scripts/scrape_once.py
+```
+
+El primer comando borra todas las capturas ONPE/JNE de la base configurada. El
+segundo comando carga la primera captura nueva.
+
 GitHub Actions queda como respaldo/manual. En pruebas del proyecto no entrego
 cadencia confiable cada 15 minutos y ONPE devolvio payload vacio desde runners
 de GitHub. La arquitectura objetivo es mover el scheduler principal a Azure
