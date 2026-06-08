@@ -12,7 +12,7 @@ import httpx
 
 
 HOST = os.getenv("ONPE_HOST", "resultadosegundavuelta.onpe.gob.pe").strip()
-MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{HOST}/main/presidenciales").strip()
+MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{HOST}/main/resumen").strip()
 BASE_API = os.getenv("ONPE_BASE_API", f"https://{HOST}/presentacion-backend").strip()
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -84,6 +84,8 @@ async def _run() -> None:
         process_path = "/proceso/proceso-electoral-activo"
         process_resp = await client.get(f"{BASE_API}{process_path}")
         process_hash = hashlib.sha256(process_resp.content).hexdigest()[:16]
+        process_content_type = process_resp.headers.get("content-type", "")
+        process_html_fallback = process_resp.text.lstrip().lower().startswith(("<!doctype html", "<html"))
         try:
             process_json = process_resp.json()
             process_json_error = ""
@@ -95,7 +97,9 @@ async def _run() -> None:
         print(
             "DIAG process_probe "
             f"status={process_resp.status_code} http={process_resp.http_version} "
-            f"len={len(process_resp.content)} sha={process_hash}{process_json_error}"
+            f"len={len(process_resp.content)} sha={process_hash} "
+            f"content_type={process_content_type!r} html_fallback={process_html_fallback}"
+            f"{process_json_error}"
         )
         print(f"DIAG id_eleccion={id_eleccion}")
 
@@ -113,12 +117,15 @@ async def _run() -> None:
         for name, path in endpoints.items():
             response = await client.get(f"{BASE_API}{path}")
             body_hash = hashlib.sha256(response.content).hexdigest()[:16]
+            content_type = response.headers.get("content-type", "")
+            html_fallback = response.text.lstrip().lower().startswith(("<!doctype html", "<html"))
             try:
                 payload = response.json()
             except Exception as exc:
                 print(
                     f"DIAG {name} status={response.status_code} http={response.http_version} "
-                    f"len={len(response.content)} sha={body_hash} json_error={type(exc).__name__}"
+                    f"len={len(response.content)} sha={body_hash} content_type={content_type!r} "
+                    f"html_fallback={html_fallback} json_error={type(exc).__name__}"
                 )
                 continue
 
@@ -126,7 +133,8 @@ async def _run() -> None:
             data = payload.get("data") if isinstance(payload, dict) else None
             print(
                 f"DIAG {name} status={response.status_code} http={response.http_version} "
-                f"len={len(response.content)} sha={body_hash} success={success} data={_data_shape(data)}"
+                f"len={len(response.content)} sha={body_hash} content_type={content_type!r} "
+                f"html_fallback={html_fallback} success={success} data={_data_shape(data)}"
             )
 
 

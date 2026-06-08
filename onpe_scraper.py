@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 
 ONPE_HOST = os.getenv("ONPE_HOST", "resultadosegundavuelta.onpe.gob.pe").strip()
-ONPE_MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{ONPE_HOST}/main/presidenciales").strip()
+ONPE_MAIN_URL = os.getenv("ONPE_MAIN_URL", f"https://{ONPE_HOST}/main/resumen").strip()
 BASE_API = os.getenv("ONPE_BASE_API", f"https://{ONPE_HOST}/presentacion-backend").strip()
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
@@ -35,6 +35,10 @@ HEADERS = {
 }
 
 
+class OnpeApiUnavailable(RuntimeError):
+    """Raised when ONPE serves the SPA/HTML fallback instead of JSON data."""
+
+
 def _parse_ts(ms: int) -> str:
     """Convert JS timestamp (ms) to ISO string."""
     return datetime.fromtimestamp(ms / 1000).isoformat()
@@ -44,10 +48,19 @@ async def fetch_json(client: httpx.AsyncClient, path: str) -> dict | list | None
     url = f"{BASE_API}{path}"
     try:
         r = await client.get(url, timeout=15)
+        content_type = r.headers.get("content-type", "")
+        body_start = (r.text or "").lstrip()[:80]
+        if "text/html" in content_type or body_start.lower().startswith(("<!doctype html", "<html")):
+            raise OnpeApiUnavailable(
+                "ONPE devolvió HTML en vez de JSON. "
+                f"url={url} status={r.status_code} content_type={content_type!r}"
+            )
         if r.status_code == 200 and r.text:
             data = r.json()
-            if data.get("success"):
+            if isinstance(data, dict) and data.get("success"):
                 return data.get("data")
+    except OnpeApiUnavailable:
+        raise
     except Exception:
         pass
     return None
@@ -87,6 +100,12 @@ async def scrape() -> dict:
             client,
             f"/resumen-general/mapa-calor?idEleccion={id_eleccion}&tipoFiltro=total",
         )
+
+        if not totals and not candidates:
+            raise OnpeApiUnavailable(
+                "ONPE no devolvió totales ni candidaturas. "
+                f"main_url={ONPE_MAIN_URL} base_api={BASE_API} id_eleccion={id_eleccion}"
+            )
 
         return {
             "process": process,

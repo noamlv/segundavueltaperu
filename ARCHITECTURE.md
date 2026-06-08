@@ -13,7 +13,7 @@ modificar el dashboard, los scrapers, la base de datos o el despliegue.
 - Scheduler probado: Azure Container Apps Jobs funciona para JNE/Supabase, pero
   no quedo apto para ONPE por degradacion de la API desde varias IPs Azure
 - Usuario colaborador operativo: `addmoeueperu`
-- ONPE default actual: `https://resultadosegundavuelta.onpe.gob.pe/main/presidenciales`
+- ONPE default actual: `https://resultadosegundavuelta.onpe.gob.pe/main/resumen`
 
 Nota de cuenta: en GitHub el colaborador aparece como `addmoeueperu`. Si en la
 conversacion aparece como `addmoeperu` o `addmoeuperu`, tratarlo como una
@@ -232,7 +232,7 @@ no debe borrar datos validos anteriores.
 La web oficial de segunda vuelta esta publicada en:
 
 ```text
-https://resultadosegundavuelta.onpe.gob.pe/main/presidenciales
+https://resultadosegundavuelta.onpe.gob.pe/main/resumen
 ```
 
 El backend mantiene el patron:
